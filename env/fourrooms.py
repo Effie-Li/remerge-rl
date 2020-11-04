@@ -27,7 +27,10 @@ class NewFourRoomsEnv(FourRoomsEnv):
         
         self._agent_default_pos = agent_pos
         self._goal_default_pos = goal_pos
-        super().__init__() # calls reset
+        
+        super().__init__()# super init calls reset
+        # overwriting max_steps to prevent premature flagging of done (esp. with the action wrapper)
+        self.max_steps = max_steps=math.inf
     
     def reset(self, new_seed=None):
         # by default remains the same grid
@@ -49,7 +52,7 @@ class NewFourRoomsEnv(FourRoomsEnv):
         pos = None
         
         if room is None: # sample any empty location in grid
-            pos = self.place_obj(obj=None)
+            pos = self.place_obj(obj=None, top=(0,0), size=(19,19))
         elif room == 1:
             pos = self.place_obj(obj=None, top=(0,0), size=(9,9))
         elif room == 2:
@@ -177,6 +180,7 @@ class FourRoomsTask:
         
         self.env = env
         
+        self.phase = 'train'
         self.reset()
     
     def reset(self, new_task=True, new_seed=None, **task_kwargs):
@@ -193,7 +197,10 @@ class FourRoomsTask:
         ns, r, done, info = self.env.step(a)
         return ns, r, done, info
     
-    def update_task(self, phase='train', difficulty=1, max_tries=1000):
+    def set_phase(self, phase):
+        self.phase = phase
+    
+    def update_task(self, difficulty=1, max_tries=1000):
         
         if self.task_type == 'random':
             self.agent_ini_pos = self.env.sample_pos()
@@ -208,7 +215,7 @@ class FourRoomsTask:
 
             self.test_tasks = TI_TEST_TASKS['diff-%d'%difficulty]
 
-            if phase=='train':
+            if self.phase=='train':
                 # construct a task that doesn't overlap with test tasks
                 num_tries = 0
                 while True:
@@ -228,7 +235,7 @@ class FourRoomsTask:
 
                 self.current_task = task
 
-            if phase=='test':
+            if self.phase=='test':
                 self.current_task = random.choice(self.test_tasks)
 
             # modify agent/goal positions based on current task

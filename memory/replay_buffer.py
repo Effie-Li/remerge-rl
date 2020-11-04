@@ -3,7 +3,7 @@ import numpy as np
 import random
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'reward', 'next_state'))
+                        ('state', 'action', 'reward', 'next_state', 'goal'))
 
 class ReplayBuffer(object):
     def __init__(self, num_slot=10000, batch_size=32):
@@ -11,8 +11,8 @@ class ReplayBuffer(object):
         self.batch_size = batch_size
         self.memory = deque()
         
-    def add(self, state, action, reward, next_state):
-        self.memory.append(Transition(*(state, action, reward, next_state)))
+    def add(self, state, action, reward, next_state, goal=None):
+        self.memory.append(Transition(*(state, action, reward, next_state, goal)))
         if len(self.memory) > self.num_slot:
             # remove oldest memory
             self.memory.popleft()

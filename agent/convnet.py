@@ -43,3 +43,29 @@ class ConvNet(nn.Module):
         clone = ConvNet(h=self.h, w=self.w, n_out=self.n_out)
         clone.load_state_dict(self.state_dict())
         return clone
+    
+class GoalCondConvNet(nn.Module):
+    
+    def __init__(self, h, w, n_out):
+        
+        self.h = h
+        self.w = w
+        self.n_out = n_out
+                
+        super(GoalCondConvNet, self).__init__()
+        self.conv1 = ConvNet(h=self.h, w=self.w, n_out=128)
+        self.conv2 = ConvNet(h=self.h, w=self.w, n_out=128)
+        
+        self.merge = nn.Linear(128*2, n_out)
+
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
+    def forward(self, x1, x2):
+        x1 = self.conv1(x1)
+        x2 = self.conv2(x2)
+        return self.merge(torch.cat((x1, x2), axis=-1))
+    
+    def clone(self):
+        clone = GoalCondConvNet(h=self.h, w=self.w, n_out=self.n_out)
+        clone.load_state_dict(self.state_dict())
+        return clone
