@@ -1,7 +1,7 @@
 from gym_minigrid.wrappers import *
 from gym_minigrid.minigrid import *
+from .wrappers import *
 from gym_minigrid.envs.fourrooms import FourRoomsEnv
-from . import ActionWrapper, CHWWrapper
 
 import random
 import math
@@ -62,6 +62,88 @@ class NewFourRoomsEnv(FourRoomsEnv):
             raise ValueError('which room???')
             
         return pos
+    
+    def render(self, goal=False, mode='human', close=False, highlight=True, tile_size=TILE_PIXELS):
+        
+        if not goal:
+            
+            return super().render(mode=mode, close=close, highlight=highlight, tile_size=tile_size)
+        
+        else:
+            '''
+            hacks super().render() and generate separate current state and goal state images
+            '''
+
+            if close:
+                if self.window:
+                    self.window.close()
+                return
+
+            if mode == 'human' and not self.window:
+                import gym_minigrid.window
+                self.window = gym_minigrid.window.Window('gym_minigrid')
+                self.window.show(block=False)
+
+            # Compute which cells are visible to the agent
+            _, vis_mask = self.gen_obs_grid()
+
+            # Compute the world coordinates of the bottom-left corner
+            # of the agent's view area
+            f_vec = self.dir_vec
+            r_vec = self.right_vec
+            top_left = self.agent_pos + f_vec * (self.agent_view_size-1) - r_vec * (self.agent_view_size // 2)
+
+            # Mask of which cells to highlight
+            highlight_mask = np.zeros(shape=(self.width, self.height), dtype=np.bool)
+
+            # For each cell in the visibility mask
+            for vis_j in range(0, self.agent_view_size):
+                for vis_i in range(0, self.agent_view_size):
+                    # If this cell is not visible, don't highlight it
+                    if not vis_mask[vis_i, vis_j]:
+                        continue
+
+                    # Compute the world coordinates of this cell
+                    abs_i, abs_j = top_left - (f_vec * vis_j) + (r_vec * vis_i)
+
+                    if abs_i < 0 or abs_i >= self.width:
+                        continue
+                    if abs_j < 0 or abs_j >= self.height:
+                        continue
+
+                    # Mark this cell to be highlighted
+                    highlight_mask[abs_i, abs_j] = True
+            
+            '''
+            hacky way of aligning state and goal observation:
+            remder a pseudo 'goal' at agent_pos, and another real 'goal' at goal_pos
+            all to sideway gym-minigrid's smart handling of rendering agent or goal objects
+            '''
+            state_grid = self.grid.copy()
+            state_grid.set(*self._goal_default_pos, None)
+            state_grid.set(*self.agent_pos, Goal())
+
+            # Render the state grid
+            state_img = state_grid.render( # with agent_pos replaced with a goal block (so that it looks green :)
+                tile_size,
+                agent_pos=None,
+                agent_dir=None,
+                highlight_mask=highlight_mask if highlight else None
+            )
+            
+            # Render the goal grid
+            goal_img = self.grid.render( # with the true goal
+                tile_size,
+                agent_pos=None,
+                agent_dir=None,
+                highlight_mask=highlight_mask if highlight else None
+            )
+
+            if mode == 'human':
+                self.window.show_img(img)
+                self.window.set_caption(self.mission)
+            
+            return state_img, goal_img
 
 class FourRoomsTask:
     
@@ -71,21 +153,29 @@ class FourRoomsTask:
     transitive inference task (TIT, train/test split)
     """
     
-    def __init__(self, task_type='ti', seed=None):
+    def __init__(self, task_type='ti', goalcond=False, seed=None):
         
         # task = ti: transitive inference,
         #        random: the default minigrid position sampling
         # seed, this task overwrites position sampling so seed is really just for grid
         
         self.task_type = task_type
+        self.goalcond = goalcond
         self.grid_seed = random.randint(1, 100000) if seed is None else seed
-        self.env = NewFourRoomsEnv()
+        env = NewFourRoomsEnv()
         
         # apply some default env wrappers
-        self.env = ActionWrapper(self.env) # 0-up, 1-right, 2-down, 3-left
-        self.env = RGBImgObsWrapper(self.env) # Get pixel observations
-        self.env = CHWWrapper(self.env) # reshape to [c,h,w]
-        self.env = ImgObsWrapper(self.env) # just use the image
+        env = ActionWrapper(env) # 0-up, 1-right, 2-down, 3-left
+        if self.goalcond:
+            env = GoalCondRgbImgObsWrapper(env) # add goal field
+            env = GoalCondCHWWrapper(env) # reshape
+        else:
+            env = RGBImgObsWrapper(env)
+            env = CHWWrapper(env)
+        
+        # env = ImgObsWrapper(env) # just use the image
+        
+        self.env = env
         
         self.reset()
     
@@ -106,10 +196,10 @@ class FourRoomsTask:
     def update_task(self, phase='train', difficulty=1, max_tries=1000):
         
         if self.task_type == 'random':
-            self.env.agent_pos = self.env.sample_pos()
-            self.env.change_agent_default_pos(self.env.agent_pos)
-            self.env.goal_pos = self.env.sample_pos()
-            self.env.change_goal_default_pos(self.env.goal_pos)
+            self.agent_ini_pos = self.env.sample_pos()
+            self.env.change_agent_default_pos(self.agent_ini_pos)
+            self.goal_pos = self.env.sample_pos()
+            self.env.change_goal_default_pos(self.goal_pos)
         
         elif self.task_type == 'ti':
             # phase = train/test
@@ -145,9 +235,9 @@ class FourRoomsTask:
             start_room = int(self.current_task[0])
             goal_room = int(self.current_task[-1])
             
-            self.env.agent_pos = None
-            self.env.goal_pos = None
-            self.env.agent_pos = self.env.sample_pos(start_room)
-            self.env.change_agent_default_pos(self.env.agent_pos)
-            self.env.goal_pos = self.env.sample_pos(goal_room)
-            self.env.change_goal_default_pos(self.env.goal_pos)
+            self.agent_ini_pos = None
+            self.goal_pos = None
+            self.agent_ini_pos = self.env.sample_pos(start_room)
+            self.env.change_agent_default_pos(self.agent_ini_pos)
+            self.goal_pos = self.env.sample_pos(goal_room)
+            self.env.change_goal_default_pos(self.goal_pos)
