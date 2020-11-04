@@ -6,12 +6,12 @@ from gym_minigrid.envs.fourrooms import FourRoomsEnv
 import random
 import math
 
-TI_TEST_TASKS = {'diff-1': ['1-2', '2-1',
-                            '1-3', '3-1',
-                            '2-4', '4-2',
-                            '3-4', '4-3'], # adjacent room navigations
-                 'diff-2': ['1-4', '4-1', 
-                            '2-3', '3-2'] # diagonal room navigations
+TI_TEST_TASKS = {'ti-1': ['1-2', '2-1',
+                          '1-3', '3-1',
+                          '2-4', '4-2',
+                          '3-4', '4-3'], # adjacent room navigations
+                 'ti-2': ['1-4', '4-1', 
+                          '2-3', '3-2'] # diagonal room navigations
                 }
 
 class NewFourRoomsEnv(FourRoomsEnv):
@@ -22,7 +22,7 @@ class NewFourRoomsEnv(FourRoomsEnv):
     def __init__(self, agent_pos=None, goal_pos=None, seed=None):
         
         self.rooms = [1,2,3,4] # upper left, upper right, lower left, lower right
-        self.default_seed = seed if seed is not None else random.randint(1,1000000)
+        self.current_seed = seed if seed is not None else random.randint(1,1000000)
         self.current_task = None
         
         self._agent_default_pos = agent_pos
@@ -34,8 +34,10 @@ class NewFourRoomsEnv(FourRoomsEnv):
     
     def reset(self, new_seed=None):
         # by default remains the same grid
-        seed = new_seed if new_seed is not None else self.default_seed
-        self.seed(seed)
+        
+        if new_seed is not None:
+            self.current_seed = new_seed
+            self.seed(self.current_seed)
         obs = super().reset()
         return obs
     
@@ -48,6 +50,10 @@ class NewFourRoomsEnv(FourRoomsEnv):
     def sample_pos(self, room=None):
         # calls place_obj with obj=None only for sampling purposes
         # if need to avoid agent/goal overlap needs to make sure self.agent_pos is set before calling place_obj()
+        
+        # overwrite seed -- this seed thing is so annoying
+        # want to use consistent seed for grid creation but randomize position sampling
+        self.seed(random.randint(0, 100000))
         
         pos = None
         
@@ -63,6 +69,8 @@ class NewFourRoomsEnv(FourRoomsEnv):
             pos = self.place_obj(obj=None, top=(9,9), size=(9,9))
         else:
             raise ValueError('which room???')
+        
+        self.seed(self.current_seed) # reseed back
             
         return pos
     
@@ -156,7 +164,7 @@ class FourRoomsTask:
     transitive inference task (TIT, train/test split)
     """
     
-    def __init__(self, task_type='ti', goalcond=False, seed=None):
+    def __init__(self, task_type='ti-1', goalcond=False, seed=None):
         
         # task = ti: transitive inference,
         #        random: the default minigrid position sampling
@@ -200,7 +208,7 @@ class FourRoomsTask:
     def set_phase(self, phase):
         self.phase = phase
     
-    def update_task(self, difficulty=1, max_tries=1000):
+    def update_task(self, max_tries=1000):
         
         if self.task_type == 'random':
             self.agent_ini_pos = self.env.sample_pos()
@@ -208,12 +216,12 @@ class FourRoomsTask:
             self.goal_pos = self.env.sample_pos()
             self.env.change_goal_default_pos(self.goal_pos)
         
-        elif self.task_type == 'ti':
+        elif 'ti' in self.task_type:
             # phase = train/test
             # difficulty = 1/2 (1: train with within-room, test with across-room)
             #                  (2: train with within or adjacent room, test with diagonal room)
 
-            self.test_tasks = TI_TEST_TASKS['diff-%d'%difficulty]
+            self.test_tasks = TI_TEST_TASKS[self.task_type]
 
             if self.phase=='train':
                 # construct a task that doesn't overlap with test tasks
@@ -223,10 +231,10 @@ class FourRoomsTask:
                         raise RecursionError('rejection sampling failed in FourRoomsTask.update_task()')
                     num_tries += 1
 
-                    if difficulty==1:
+                    if self.task_type=='ti-1':
                         r1 = random.choice(self.env.rooms)
                         r2 = r1
-                    if difficulty==2:
+                    if self.task_type=='ti-2':
                         r1 = random.choice(self.env.rooms)
                         r2 = random.choice(self.env.rooms)
                     task = '%d-%d' % (r1, r2)
