@@ -1,28 +1,33 @@
-from collections import deque
+from collections import deque, namedtuple
 import numpy as np
 import random
 
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'reward', 'next_state'))
+
 class ReplayBuffer(object):
-    def __init__(self, num_slot, batch_size=32):
+    def __init__(self, num_slot=10000, batch_size=32):
         self.num_slot = num_slot
         self.batch_size = batch_size
         self.memory = deque()
         
     def add(self, state, action, reward, next_state):
-        self.memory.append((state, action, reward, next_state))
+        self.memory.append(Transition(*(state, action, reward, next_state)))
         if len(self.memory) > self.num_slot:
             # remove oldest memory
             self.memory.popleft()
-        
+    
     def sample(self, batch_size=None):
         if (batch_size is None):
             batch_size = self.batch_size
-        samples = random.sample(self.memory, batch_size)
-        states = np.array([x[0] for x in samples])
-        actions = np.array([x[1] for x in samples])
-        rewards = np.array([x[2] for x in samples])
-        next_states = np.array([x[3] for x in samples])
-        return states, actions, rewards, next_states
+        transitions = random.sample(self.memory, batch_size)
+        
+        # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+        # detailed explanation). This converts batch-array of Transitions
+        # to Transition of batch-arrays.
+        batch = Transition(*zip(*transitions))
+        
+        return batch
 
     def __len__(self):
         return len(self.memory)

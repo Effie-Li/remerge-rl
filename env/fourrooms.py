@@ -1,7 +1,7 @@
 from gym_minigrid.wrappers import *
 from gym_minigrid.minigrid import *
 from gym_minigrid.envs.fourrooms import FourRoomsEnv
-from . import ActionWrapper
+from . import ActionWrapper, CHWWrapper
 
 import random
 import math
@@ -84,7 +84,8 @@ class FourRoomsTask:
         # apply some default env wrappers
         self.env = ActionWrapper(self.env) # 0-up, 1-right, 2-down, 3-left
         self.env = RGBImgObsWrapper(self.env) # Get pixel observations
-        self.env = ImgObsWrapper(self.env)
+        self.env = CHWWrapper(self.env) # reshape to [c,h,w]
+        self.env = ImgObsWrapper(self.env) # just use the image
         
         self.reset()
     
@@ -98,7 +99,7 @@ class FourRoomsTask:
         obs = self.env.reset()
         return obs
     
-    def step(self, action):
+    def step(self, a):
         ns, r, done, info = self.env.step(a)
         return ns, r, done, info
     

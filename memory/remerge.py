@@ -1,4 +1,5 @@
 from .replay_buffer import ReplayBuffer
+import numpy as np
 
 class RemergeMemory(ReplayBuffer):
     
@@ -33,6 +34,14 @@ class RemergeMemory(ReplayBuffer):
         if len(self.memory) > self.num_slot:
             # remove oldest memory
             self.free()
+            
+        # update memory network connections
+        
+    def add_unique(self, x, arr):
+        # add x if x is not already in arr, return the index
+        if x not in arr:
+            arr.append(x)
+        return arr.index(x)
         
     def free(self):
         forget = self.memory.popleft()

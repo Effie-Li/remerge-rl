@@ -3,7 +3,7 @@ from gym import spaces
 
 class ActionWrapper(gym.core.Wrapper):
     """
-    Warpper for GridWorld that uses up/down/left/right actions
+    Warpper for gym-minigrid that uses up/down/left/right actions
 
     """
 
