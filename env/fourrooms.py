@@ -19,7 +19,10 @@ class NewFourRoomsEnv(FourRoomsEnv):
     Extends the FourRoomsEnv in gym_minigrid so things go as i want
     """
 
-    def __init__(self, agent_pos=None, goal_pos=None, seed=None):
+    def __init__(self, 
+                 agent_pos=None, 
+                 goal_pos=None, 
+                 seed=None):
         
         self.rooms = [1,2,3,4] # upper left, upper right, lower left, lower right
         self.current_seed = seed if seed is not None else random.randint(1,1000000)
@@ -197,13 +200,18 @@ class FourRoomsTask:
     transitive inference task (TIT, train/test split)
     """
     
-    def __init__(self, task_type='ti-1', goalcond=False, seed=None):
+    def __init__(self, 
+                 task_type='ti-1', 
+                 reward_type='sparse', 
+                 goalcond=False, 
+                 seed=None):
         
         # task = ti: transitive inference,
         #        random: the default minigrid position sampling
         # seed, this task overwrites position sampling so seed is really just for grid
         
         self.task_type = task_type
+        self.reward_type = reward_type
         self.goalcond = goalcond
         self.grid_seed = random.randint(1, 100000) if seed is None else seed
         env = NewFourRoomsEnv()
@@ -217,8 +225,10 @@ class FourRoomsTask:
             env = CHWWrapper(env)
         
         self.env = env
-        
+        self.agent_ini_pos = None
+        self.goal_pos = None
         self.phase = 'train'
+        
         self.reset()
     
     def reset(self, new_task=True, new_seed=None, **task_kwargs):
@@ -234,9 +244,15 @@ class FourRoomsTask:
     def step(self, a):
         ns, r, done, info = self.env.step(a)
         # overwrite reward
-        # r = 0.0 if not done else 1.0
-        r = -1.0 if not done else 0.0
+        r = self.reward(done)
         return ns, r, done, info
+    
+    def reward(self, done):
+        if self.reward_type=='sparse':
+            r = 0.0 if not done else 1.0
+        elif self.reward_type=='dense':
+            r = -1.0 if not done else 0.0
+        return r
     
     def set_phase(self, phase):
         self.phase = phase
@@ -245,9 +261,26 @@ class FourRoomsTask:
         
         if self.task_type == 'random':
             self.agent_ini_pos = self.env.sample_pos()
-            self.env.change_agent_default_pos(self.agent_ini_pos)
             self.goal_pos = self.env.sample_pos()
-            self.env.change_goal_default_pos(self.goal_pos)
+            
+        elif self.task_type == 'fixed':
+            # fixed start and goal
+            if self.agent_ini_pos is None: # and self.goal_pos is None
+                r1, r2 = random.sample(self.env.rooms, 2)
+                self.agent_ini_pos = self.env.sample_pos(r1)
+                self.goal_pos = self.env.sample_pos(r2)
+        
+        elif self.task_type == 'fixed-g':
+            # fixed goal, changing start
+            if self.goal_pos is None: # and self.goal_pos is None
+                self.goal_pos = self.env.sample_pos()
+            self.agent_ini_pos = self.env.sample_pos()
+        
+        elif self.task_type == 'fixed-s':
+            # fixed start, changing goal
+            if self.agent_ini_pos is None:
+                self.agent_ini_pos = self.env.sample_pos()
+            self.goal_pos = self.env.sample_pos()
         
         elif 'ti' in self.task_type:
             # phase = train/test
@@ -284,10 +317,9 @@ class FourRoomsTask:
             # modify agent/goal positions based on current task
             start_room = int(self.current_task[0])
             goal_room = int(self.current_task[-1])
-            
-            self.agent_ini_pos = None
-            self.goal_pos = None
+
             self.agent_ini_pos = self.env.sample_pos(start_room)
-            self.env.change_agent_default_pos(self.agent_ini_pos)
             self.goal_pos = self.env.sample_pos(goal_room)
-            self.env.change_goal_default_pos(self.goal_pos)
+            
+        self.env.change_agent_default_pos(self.agent_ini_pos)
+        self.env.change_goal_default_pos(self.goal_pos)

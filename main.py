@@ -62,7 +62,7 @@ def train(task,
             # test_results = test(task, num_epochs=10) # too slow
             
             test_results = tuple(map(lambda task: test(task, agent, num_episodes=1), 
-                                     [task] * 10))
+                                     [task] * 50))
             
             batch_n_step = [x['n_step'][0] for x in test_results]
             batch_solved = [x['solved'][0] for x in test_results]
@@ -76,7 +76,7 @@ def train(task,
             task.set_phase('test')
             
             test_results = tuple(map(lambda task: test(task, agent, num_episodes=1), 
-                                     [task] * 10))
+                                     [task] * 50))
             
             batch_n_step = [x['n_step'][0] for x in test_results]
             batch_solved = [x['solved'][0] for x in test_results]
@@ -116,7 +116,7 @@ def test(task,
             next_state = torch.from_numpy(next_obs['image'].astype(np.float32)).unsqueeze(0).to(agent.device)
 
             if done:
-                if verbose: print('arrived! agent_pos: ', task.env.env.env.env.agent_pos)
+                if verbose: print('arrived! agent_pos: ', task.env.env.env.agent_pos) # so many wrapper layers
                 next_state = None
 
             # Move to the next state
@@ -133,26 +133,30 @@ def test(task,
 
     return results
 
-
 def run(run_ID,
         log_dir,
         cuda_idx,
         task_type,
+        reward_type,
         memory):    
     
     device = torch.device("cuda:%d" % cuda_idx)
     
-    run_key = '{}_{}_run{}_{}'.format(task_type, 
-                                      memory, 
-                                      run_ID,
-                                      datetime.now().strftime('%y%m%d%H%M'))
+    run_key = '{}_{}_{}_run{}_{}'.format(task_type, 
+                                         reward_type,
+                                         memory, 
+                                         run_ID,
+                                         datetime.now().strftime('%y%m%d%H%M'))
     writer = SummaryWriter(log_dir+run_key)
     
-    task = FourRoomsTask(task_type=task_type, 
+    task = FourRoomsTask(task_type=task_type,
+                         reward_type=reward_type,
                          goalcond=True)
     obs = task.reset()
     if memory == 'replaybuffer':
         memory = ReplayBuffer()
+    if memory == 'remerge':
+        memory = RemergeMemory()
         
     agent = DQN(state_dim=obs['image'].shape, 
                 action_dim=4, 
@@ -160,10 +164,11 @@ def run(run_ID,
                 device=device, 
                 memory=memory)
     
-    train(task, agent, writer=writer, num_epochs=50)
+    train(task, agent, writer=writer)
     
     print('two thousand years later...')
     
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -171,10 +176,12 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', help='logging directory', default='/data5/liyuxuan/remerge/')
     parser.add_argument('--cuda_idx', help='gpu to use', type=int, default=4)
     parser.add_argument('--task_type', help='task to run', default='ti-1')
+    parser.add_argument('--reward_type', help='reward to use', default='sparse')
     parser.add_argument('--memory', help='memory to use', default='replaybuffer')
     args = parser.parse_args()
     run(run_ID=args.run_ID,
         log_dir=args.log_dir,
         cuda_idx=args.cuda_idx,
         task_type=args.task_type,
+        reward_type=args.reward_type,
         memory=args.memory)
