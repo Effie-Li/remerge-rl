@@ -19,7 +19,13 @@ class DQN():
     https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
     '''
     
-    def __init__(self, state_dim, action_dim, device, memory, goalcond=False):
+    def __init__(self, 
+                 state_dim, 
+                 action_dim, 
+                 device, 
+                 memory,
+                 goalcond=False):
+        
         self.state_dim = state_dim # [C, H, W]
         c, h, w = state_dim
         self.action_dim = action_dim
@@ -37,7 +43,9 @@ class DQN():
         
         self.step_count = 0
     
-    def step(self, state, goal=None):
+    def step(self, 
+             state, 
+             goal=None):
         
         if self.goalcond:
             if goal is None:
@@ -66,7 +74,8 @@ class DQN():
     def update_target_network(self):
         self.target_network.load_state_dict(self.network.state_dict())
         
-    def train(self):
+    def _train(self):
+        
         if len(self.memory) < BATCH_SIZE:
             return
         batch = self.memory.sample(batch_size=BATCH_SIZE)
@@ -104,13 +113,10 @@ class DQN():
                                                                     non_final_goal_states).max(1)[0].detach()
         else:
             next_state_values[non_final_mask] = self.target_network(non_final_next_states).max(1)[0].detach()
-        # Compute the expected Q values
+        
         expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+        loss = F.mse_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
-        # Compute Huber loss
-        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
-
-        # Optimize the model
         self.optim.zero_grad()
         loss.backward()
         for param in self.network.parameters():
@@ -118,45 +124,3 @@ class DQN():
         self.optim.step()
         
         return loss
-    
-    def test(self, task, num_episodes=100, max_steps=100, verbose=False):
-        
-        results = {'n_step':np.zeros(num_episodes),
-                   'solved':np.zeros(num_episodes),
-                   'reward':np.zeros(num_episodes)}
-        
-        for i in range(num_episodes):
-            
-            # Initialize the environment and state
-            obs = task.reset()
-            if verbose: print('task: ', task.agent_ini_pos, '-->', task.goal_pos, end=' ...... ')
-            state = torch.from_numpy(obs['image'].astype(np.float32)).unsqueeze(0).to(self.device)
-            if self.goalcond:
-                goal = torch.from_numpy(obs['goal'].astype(np.float32)).unsqueeze(0).to(self.device)
-            
-            for t in count():
-                if self.goalcond:
-                    # goal shouldn't change within an episode
-                    action = self.step(state=state, goal=goal)
-                else:
-                    action = self.step(state=state)
-                next_obs, reward, done, _ = task.step(action.item())
-                next_state = torch.from_numpy(next_obs['image'].astype(np.float32)).unsqueeze(0).to(self.device)
-
-                if done:
-                    if verbose: print('arrived! agent_pos: ', task.env.env.env.env.agent_pos)
-                    next_state = None
-
-                # Move to the next state
-                state = next_state
-
-                if done or t+1 >= max_steps:
-                    break
-            
-            if verbose: print('')
-            
-            results['n_step'][i] = t+1
-            results['solved'][i] = done
-            results['reward'][i] = reward # reward at last step
-        
-        return results

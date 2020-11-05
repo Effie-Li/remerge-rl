@@ -203,6 +203,8 @@ class FourRoomsTask:
     
     def step(self, a):
         ns, r, done, info = self.env.step(a)
+        # overwrite r to be sparse 1
+        r = 0.0 if not done else 1.0
         return ns, r, done, info
     
     def set_phase(self, phase):
