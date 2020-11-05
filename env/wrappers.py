@@ -58,7 +58,7 @@ class CHWWrapper(gym.core.Wrapper):
         obs['image'] = obs['image'].transpose((2, 0, 1))
         
         return obs, reward, done, info
-
+    
 class GoalCondCHWWrapper(gym.core.Wrapper):
     """
     Warpper for gym-minigrid that converts (both state and goal) images to CHW for torch compatibilities
@@ -79,7 +79,7 @@ class GoalCondCHWWrapper(gym.core.Wrapper):
         obs['goal'] = obs['goal'].transpose((2, 0, 1))
         return obs, reward, done, info
     
-class GoalCondRgbImgObsWrapper(RGBImgObsWrapper):
+class GoalCondRGBImgObsWrapper(RGBImgObsWrapper):
     """
     Warpper for gym-minigrid that add a 'goal' field in the observation
 
@@ -105,3 +105,16 @@ class GoalCondRgbImgObsWrapper(RGBImgObsWrapper):
             'image': rgb_img,
             'goal': goal_img
         }
+    
+class GoalCondObsWrapper(gym.core.ObservationWrapper):
+    
+    def __init__(self, env):
+        super().__init__(env)
+        self.observation_space = self.env.observation_space
+        self.observation_space.spaces['goal'] = self.observation_space.spaces['image']
+        
+    def observation(self, obs):
+        
+        obs = self.env.gen_obs(goal=True)
+        
+        return obs

@@ -5,7 +5,7 @@ import torch
 import torch.nn
 import torch.nn.functional as F
 from itertools import count
-from . import ConvNet, GoalCondConvNet
+from . import GridConvNet, GoalCondGridConvNet
 
 class DQN():
     '''
@@ -27,9 +27,9 @@ class DQN():
         self.goalcond = goalcond
         
         if self.goalcond:
-            self.network = GoalCondConvNet(h=h, w=w, n_out=action_dim).to(device)
+            self.network = GoalCondGridConvNet(h=h, w=w, n_out=action_dim).to(device)
         else:
-            self.network = ConvNet(h=h, w=w, n_out=action_dim).to(device)
+            self.network = GridConvNet(h=h, w=w, n_out=action_dim).to(device)
         self.target_network = self.network.clone().to(device)
 
         self.optim = torch.optim.RMSprop(self.network.parameters())
@@ -113,7 +113,7 @@ class DQN():
             next_state_values[non_final_mask] = self.target_network(non_final_next_states).max(1)[0].detach()
         
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch
-        loss = F.mse_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
         self.optim.zero_grad()
         loss.backward()

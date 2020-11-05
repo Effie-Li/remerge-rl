@@ -74,6 +74,39 @@ class NewFourRoomsEnv(FourRoomsEnv):
             
         return pos
     
+    def gen_obs(self, goal=False):
+        
+        if not goal:
+            return super().gen_obs()
+        
+        else:
+            state_grid = self.grid.copy()
+            state_grid.set(*self._goal_default_pos, None)
+            state_grid.set(*self.agent_pos, Goal())
+
+            # Render the state grid
+            state_grid = state_grid.encode()[:,:,:1]
+            state_grid = self.re_encode_grid(state_grid)
+            
+            # Render the goal grid with the true goal
+            goal_grid = self.grid.encode()[:,:,:1]
+            goal_grid = self.re_encode_grid(goal_grid)
+
+            obs = {
+                'image': state_grid,
+                'goal': goal_grid,
+                'mission': self.mission
+            }
+
+            return obs
+        
+    def re_encode_grid(self, grid):
+        # original: 1-empty, 2-wall, 8-goal
+        # new: 0-empty, 1-wall, 2-goal
+        grid -= 1
+        grid[grid == 7] = 2
+        return grid
+    
     def render(self, goal=False, mode='human', close=False, highlight=True, tile_size=TILE_PIXELS):
         
         if not goal:
@@ -178,13 +211,10 @@ class FourRoomsTask:
         # apply some default env wrappers
         env = ActionWrapper(env) # 0-up, 1-right, 2-down, 3-left
         if self.goalcond:
-            env = GoalCondRgbImgObsWrapper(env) # add goal field
-            env = GoalCondCHWWrapper(env) # reshape
+            env = GoalCondObsWrapper(env) # add goal field
+            env = GoalCondCHWWrapper(env)
         else:
-            env = RGBImgObsWrapper(env)
             env = CHWWrapper(env)
-        
-        # env = ImgObsWrapper(env) # just use the image
         
         self.env = env
         
@@ -203,8 +233,9 @@ class FourRoomsTask:
     
     def step(self, a):
         ns, r, done, info = self.env.step(a)
-        # overwrite r to be sparse 1
-        r = 0.0 if not done else 1.0
+        # overwrite reward
+        # r = 0.0 if not done else 1.0
+        r = -1.0 if not done else 0.0
         return ns, r, done, info
     
     def set_phase(self, phase):
@@ -230,7 +261,9 @@ class FourRoomsTask:
                 num_tries = 0
                 while True:
                     if num_tries > max_tries:
-                        raise RecursionError('rejection sampling failed in FourRoomsTask.update_task()')
+                        # raise RecursionError('rejection sampling failed in FourRoomsTask.update_task()')
+                        print('rejection sampling failed in FourRoomsTask.update_task()')
+                        break
                     num_tries += 1
 
                     if self.task_type=='ti-1':

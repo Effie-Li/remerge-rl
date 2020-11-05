@@ -1,29 +1,26 @@
-from gym_minigrid.wrappers import *
-from env import *
+from env import FourRoomsTask
 from memory import ReplayBuffer, RemergeMemory
-from agent import DQN, GoalCondConvNet
+from agent import DQN
 
 import random
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
-import matplotlib.pyplot as plt
-from itertools import count
 
 from datetime import datetime
 
 def train(task,
           agent,
           writer,
-          num_episodes=1e6, 
+          num_epochs=1e6, 
           max_steps=100,
           log_interval=10,
           test_interval=100,
           target_update_interval=100,
           checkpoint_interval=1e4):
     
-    for i in range(int(num_episodes)):
+    for i in range(int(num_epochs)):
 
         obs = task.reset()
         state = torch.from_numpy(obs['image'].astype(np.float32)).unsqueeze(0).to(agent.device)
@@ -57,12 +54,12 @@ def train(task,
         if i % log_interval == 0:
             if len(losses) > 0:
                 writer.add_scalar('avg_loss', np.nanmean(losses), i)
-            
+        
         if i % test_interval == 0:
             
             # -- training task test --
             
-            # test_results = test(task, num_episodes=10) # too slow
+            # test_results = test(task, num_epochs=10) # too slow
             
             test_results = tuple(map(lambda task: test(task, agent, num_episodes=1), 
                                      [task] * 10))
@@ -113,7 +110,7 @@ def test(task,
         state = torch.from_numpy(obs['image'].astype(np.float32)).unsqueeze(0).to(agent.device)
         goal = torch.from_numpy(obs['goal'].astype(np.float32)).unsqueeze(0).to(agent.device)
 
-        for t in count():
+        for t in range(max_steps):
             action = agent.step(state=state, goal=goal)
             next_obs, reward, done, _ = task.step(action.item())
             next_state = torch.from_numpy(next_obs['image'].astype(np.float32)).unsqueeze(0).to(agent.device)
@@ -163,7 +160,7 @@ def run(run_ID,
                 device=device, 
                 memory=memory)
     
-    train(task, agent, writer=writer)
+    train(task, agent, writer=writer, num_epochs=50)
     
     print('two thousand years later...')
     

@@ -1,2 +1,2 @@
-from .wrappers import ActionWrapper, CHWWrapper, GoalCondCHWWrapper, GoalCondRgbImgObsWrapper
+from .wrappers import ActionWrapper, CHWWrapper, GoalCondCHWWrapper, GoalCondObsWrapper, GoalCondRGBImgObsWrapper
 from .fourrooms import NewFourRoomsEnv, FourRoomsTask
