@@ -18,16 +18,18 @@ def train(task,
           writer,
           num_episodes=1e6, 
           max_steps=100,
-          log_interval=50, # also test_interval
-          target_update_interval=10):
+          log_interval=10,
+          test_interval=100,
+          target_update_interval=100,
+          checkpoint_interval=1e4):
     
-    for i in range(num_episodes):
+    for i in range(int(num_episodes)):
 
         obs = task.reset()
         state = torch.from_numpy(obs['image'].astype(np.float32)).unsqueeze(0).to(agent.device)
         goal = torch.from_numpy(obs['goal'].astype(np.float32)).unsqueeze(0).to(agent.device)
 
-        loss_sum = 0.0
+        losses = []
 
         for t in range(max_steps):
             action = agent.step(state=state, goal=goal)
@@ -43,7 +45,7 @@ def train(task,
 
             loss = agent._train()
             if loss is not None:
-                loss_sum += loss
+                losses.append(loss.item())
 
             state = next_state
             if done:
@@ -53,6 +55,26 @@ def train(task,
             agent.target_network.load_state_dict(agent.network.state_dict())
 
         if i % log_interval == 0:
+            writer.add_scalar('avg_loss', np.nanmean(losses), i)
+            
+        if i % test_interval == 0:
+            
+            # -- training task test --
+            
+            # test_results = test(task, num_episodes=10) # too slow
+            
+            test_results = tuple(map(lambda task: test(task, agent, num_episodes=1), 
+                                [task] * 10))
+            
+            batch_n_step = [x['n_step'][0] for x in test_results]
+            batch_solved = [x['solved'][0] for x in test_results]
+            batch_reward = [x['reward'][0] for x in test_results]
+            
+            writer.add_scalar('avg_n_step', np.mean(batch_n_step), i)
+            writer.add_scalar('avg_solved', np.mean(batch_solved), i)
+            writer.add_scalar('avg_reward', np.mean(batch_reward), i)
+            
+            # -- transitive inference test --
             task.set_phase('test')
             
             test_results = tuple(map(lambda task: test(task, agent, num_episodes=1), 
@@ -62,18 +84,14 @@ def train(task,
             batch_solved = [x['solved'][0] for x in test_results]
             batch_reward = [x['reward'][0] for x in test_results]
             
-            # test_results = test(task, num_episodes=10) # too slow
-            
-            writer.add_scalar('avg_loss', loss_sum / (t+1), i)
-            writer.add_scalar('avg_n_step', np.mean(batch_n_step), i)
-            writer.add_scalar('avg_solved', np.mean(batch_solved), i)
-            writer.add_scalar('avg_reward', np.mean(batch_reward), i)
+            writer.add_scalar('avg_n_step_ti', np.mean(batch_n_step), i)
+            writer.add_scalar('avg_solved_ti', np.mean(batch_solved), i)
+            writer.add_scalar('avg_reward_ti', np.mean(batch_reward), i)
             
             task.set_phase('train')
 
-        # if i % checkpoint_interval == 0:
-            # if (checkpoint_interval is not None) and (i_ep % checkpoint_interval == 0):
-                # torch.save(self.agent.state_dict(), self.writer.get_logdir()+'/model_checkpoint_%d'%i_ep)
+        if i % checkpoint_interval == 0:
+            torch.save(agent.network.state_dict(), writer.get_logdir()+'/checkpoint_%d'%i)
 
 def test(task,
          agent,
@@ -126,24 +144,25 @@ def run(run_ID,
     
     device = torch.device("cuda:%d" % cuda_idx)
     
-    run_key = '{}_{}_run{}_{}'.format(task_type, memory, run_ID,
+    run_key = '{}_{}_run{}_{}'.format(task_type, 
+                                      memory, 
+                                      run_ID,
                                       datetime.now().strftime('%y%m%d%H%M'))
     writer = SummaryWriter(log_dir+run_key)
     
-    task = FourRoomsTask(task_type=task_type, goalcond=True)
+    task = FourRoomsTask(task_type=task_type, 
+                         goalcond=True)
     obs = task.reset()
     if memory == 'replaybuffer':
         memory = ReplayBuffer(num_slot=10000)
-    agent = DQN(state_dim=obs['image'].shape, action_dim=4, goalcond=True, 
-                device=device, memory=memory)
+        
+    agent = DQN(state_dim=obs['image'].shape, 
+                action_dim=4, 
+                goalcond=True, 
+                device=device, 
+                memory=memory)
     
-    train(task,
-          agent,
-          writer=writer,
-          num_episodes=50, 
-          max_steps=100, 
-          log_interval=10, # also test_interval
-          target_update_interval=10)
+    train(task, agent, writer=writer)
     
     print('two thousand years later...')
     
