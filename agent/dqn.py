@@ -7,13 +7,6 @@ import torch.nn.functional as F
 from itertools import count
 from . import ConvNet, GoalCondConvNet
 
-BATCH_SIZE = 32
-GAMMA = 0.999
-EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 20000
-TARGET_UPDATE = 10
-
 class DQN():
     '''
     https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
@@ -42,6 +35,11 @@ class DQN():
         self.optim = torch.optim.RMSprop(self.network.parameters())
         
         self.step_count = 0
+        self.BATCH_SIZE = 128
+        self.GAMMA = 0.99
+        self.EPS_START = 0.9
+        self.EPS_END = 0.05
+        self.EPS_DECAY = 5000
     
     def step(self, 
              state, 
@@ -54,8 +52,8 @@ class DQN():
         else:
             qvals = self.network(state) # [1, action_dim]
         
-        eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-            math.exp(-1. * self.step_count / EPS_DECAY)
+        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
+            math.exp(-1. * self.step_count / self.EPS_DECAY)
         
         sample = random.random()
         if sample > eps_threshold:
@@ -76,9 +74,9 @@ class DQN():
         
     def _train(self):
         
-        if len(self.memory) < BATCH_SIZE:
+        if len(self.memory) < self.BATCH_SIZE:
             return
-        batch = self.memory.sample(batch_size=BATCH_SIZE)
+        batch = self.memory.sample(batch_size=self.BATCH_SIZE)
 
         # Compute a mask of non-final states and concatenate the batch elements
         # (a final state would've been the one after which simulation ended)
@@ -105,7 +103,7 @@ class DQN():
         # on the "older" target_net; selecting their best reward with max(1)[0].
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
-        next_state_values = torch.zeros(BATCH_SIZE, device=self.device)
+        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
         if self.goalcond:
             # trim goal_batch to match with non_final_next_states
             non_final_goal_states = torch.cat([goal_batch[i:i+1] for i, mask in enumerate(non_final_mask) if mask], axis=0)
@@ -114,7 +112,7 @@ class DQN():
         else:
             next_state_values[non_final_mask] = self.target_network(non_final_next_states).max(1)[0].detach()
         
-        expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+        expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch
         loss = F.mse_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
         self.optim.zero_grad()

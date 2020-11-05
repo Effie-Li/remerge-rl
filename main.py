@@ -55,7 +55,8 @@ def train(task,
             agent.target_network.load_state_dict(agent.network.state_dict())
 
         if i % log_interval == 0:
-            writer.add_scalar('avg_loss', np.nanmean(losses), i)
+            if len(losses) > 0:
+                writer.add_scalar('avg_loss', np.nanmean(losses), i)
             
         if i % test_interval == 0:
             
@@ -64,7 +65,7 @@ def train(task,
             # test_results = test(task, num_episodes=10) # too slow
             
             test_results = tuple(map(lambda task: test(task, agent, num_episodes=1), 
-                                [task] * 10))
+                                     [task] * 10))
             
             batch_n_step = [x['n_step'][0] for x in test_results]
             batch_solved = [x['solved'][0] for x in test_results]
@@ -78,7 +79,7 @@ def train(task,
             task.set_phase('test')
             
             test_results = tuple(map(lambda task: test(task, agent, num_episodes=1), 
-                                [task] * 10))
+                                     [task] * 10))
             
             batch_n_step = [x['n_step'][0] for x in test_results]
             batch_solved = [x['solved'][0] for x in test_results]
@@ -154,7 +155,7 @@ def run(run_ID,
                          goalcond=True)
     obs = task.reset()
     if memory == 'replaybuffer':
-        memory = ReplayBuffer(num_slot=10000)
+        memory = ReplayBuffer()
         
     agent = DQN(state_dim=obs['image'].shape, 
                 action_dim=4, 

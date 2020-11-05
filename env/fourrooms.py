@@ -220,8 +220,8 @@ class FourRoomsTask:
         
         elif 'ti' in self.task_type:
             # phase = train/test
-            # difficulty = 1/2 (1: train with within-room, test with across-room)
-            #                  (2: train with within or adjacent room, test with diagonal room)
+            # 'ti-1': train with within-room, test with across-room
+            # 'ti-2': train with within or adjacent room, test with diagonal room
 
             self.test_tasks = TI_TEST_TASKS[self.task_type]
 
