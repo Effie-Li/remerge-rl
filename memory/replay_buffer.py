@@ -10,7 +10,7 @@ class ReplayBuffer(object):
         self.num_slot = num_slot
         self.batch_size = batch_size
         self.memory = deque()
-        
+    
     def add(self, state, action, reward, next_state, goal=None):
         self.memory.append(Transition(*(state, action, reward, next_state, goal)))
         if len(self.memory) > self.num_slot:

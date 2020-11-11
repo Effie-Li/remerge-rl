@@ -249,7 +249,7 @@ class FourRoomsTask:
     
     def reward(self, done):
         if self.reward_type=='sparse':
-            r = 0.0 if not done else 1.0
+            r = -0.001 if not done else 1.0
         elif self.reward_type=='dense':
             r = -1.0 if not done else 0.0
         return r
@@ -262,6 +262,13 @@ class FourRoomsTask:
         if self.task_type == 'random':
             self.agent_ini_pos = self.env.sample_pos()
             self.goal_pos = self.env.sample_pos()
+            
+        elif self.task_type == 'sanity':
+            # fixed start and goal in the same room
+            if self.agent_ini_pos is None: # and self.goal_pos is None
+                r = random.choice(self.env.rooms)
+                self.agent_ini_pos = self.env.sample_pos(r)
+                self.goal_pos = self.env.sample_pos(r)
             
         elif self.task_type == 'fixed':
             # fixed start and goal
@@ -323,3 +330,12 @@ class FourRoomsTask:
             
         self.env.change_agent_default_pos(self.agent_ini_pos)
         self.env.change_goal_default_pos(self.goal_pos)
+        
+    def clone(self):
+        # return a copy of the task
+        x = FourRoomsTask(task_type=self.task_type, 
+                          reward_type=self.reward_type, 
+                          goalcond=self.goalcond, 
+                          seed=self.grid_seed)
+        x.set_phase(self.phase)
+        return x

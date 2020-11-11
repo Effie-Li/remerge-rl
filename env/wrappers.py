@@ -21,21 +21,19 @@ class ActionWrapper(gym.core.Wrapper):
     def step(self, action):
 
         if action==0: # move up
-            self.env.step(0) # turn left
+            self.env.agent_dir = 3 # face up
             obs, reward, done, info = self.env.step(2) # move forward (move up)
-            self.env.step(1) # turn back to face right
+            self.env.agent_dir = 0 # back to face right
         elif action==1: # move right
             obs, reward, done, info = self.env.step(2) # move forward
         elif action==2: # move down
-            self.env.step(1) # turn right
+            self.env.agent_dir = 1 # face down
             obs, reward, done, info = self.env.step(2) # move forward (move down)
-            self.env.step(0) # turn back to face right
+            self.env.agent_dir = 0 # back to face right
         elif action==3: # move left
-            self.env.step(0)
-            self.env.step(0) # turn twice to face left
+            self.env.agent_dir = 2 # face left
             obs, reward, done, info = self.env.step(2) # move forward (move up)
-            self.env.step(1)
-            self.env.step(1) # turn back to face right
+            self.env.agent_dir = 0 # back to face right
 
         return obs, reward, done, info
 

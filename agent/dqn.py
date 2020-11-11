@@ -39,51 +39,54 @@ class DQN():
         self.GAMMA = 0.99
         self.EPS_START = 0.9
         self.EPS_END = 0.05
-        self.EPS_DECAY = 5000
+        self.EPS_DECAY = 250
     
-    def step(self, 
-             state, 
-             goal=None):
+    def select_action(self, qvals, explore=True):
         
-        if self.goalcond:
-            if goal is None:
-                raise ValueError('Gotta have a goal!!')
-            qvals = self.network(state, goal)
-        else:
-            qvals = self.network(state) # [1, action_dim]
+        # for a single step
         
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
             math.exp(-1. * self.step_count / self.EPS_DECAY)
         
         sample = random.random()
-        if sample > eps_threshold:
+        
+        if explore and (sample <= eps_threshold):
+            action = torch.tensor([[random.randrange(self.action_dim)]], 
+                                   device=self.device, dtype=torch.long)
+        else:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
-                action = qvals.max(1)[1].view(1, 1)
+                action = qvals.max(1)[1].view(1,1)
+        
+        return action #[[a]]
+    
+    def step(self,
+             state,
+             goal=None,
+             explore=True):
+        
+        if self.goalcond:
+            if goal is None:
+                raise ValueError('Gotta have a goal!!')
+            batch_qvals = self.network(state, goal)
         else:
-            action =  torch.tensor([[random.randrange(self.action_dim)]], 
-                                   device=self.device, dtype=torch.long)
+            batch_qvals = self.network(state) # [batch, action_dim]
         
-        self.step_count += 1 # maybe train() increments it?
-        return action
+        actions = [self.select_action(qvals.unsqueeze(0), explore=explore) for qvals in batch_qvals]
         
+        return actions
+    
     def update_target_network(self):
         self.target_network.load_state_dict(self.network.state_dict())
-        
+    
     def _train(self):
         
         if len(self.memory) < self.BATCH_SIZE:
             return
         batch = self.memory.sample(batch_size=self.BATCH_SIZE)
 
-        # Compute a mask of non-final states and concatenate the batch elements
-        # (a final state would've been the one after which simulation ended)
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                              batch.next_state)), device=self.device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state
-                                                    if s is not None])
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
@@ -102,16 +105,25 @@ class DQN():
         # Expected values of actions for non_final_next_states are computed based
         # on the "older" target_net; selecting their best reward with max(1)[0].
         # This is merged based on the mask, such that we'll have either the expected
-        # state value or 0 in case the state was final.
-        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
-        if self.goalcond:
-            # trim goal_batch to match with non_final_next_states
-            non_final_goal_states = torch.cat([goal_batch[i:i+1] for i, mask in enumerate(non_final_mask) if mask], axis=0)
-            next_state_values[non_final_mask] = self.target_network(non_final_next_states, 
-                                                                    non_final_goal_states).max(1)[0].detach()
-        else:
-            next_state_values[non_final_mask] = self.target_network(non_final_next_states).max(1)[0].detach()
+        # state value or the reward in case the state was final.
         
+        # Compute a mask of non-final states and concatenate the batch elements
+        # (a final state would've been the one after which simulation ended)
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                              batch.next_state)), device=self.device, dtype=torch.bool)
+        non_final_next_states = torch.cat([s for s in batch.next_state
+                                                    if s is not None])
+        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
+        with torch.no_grad():
+            if self.goalcond:
+                # trim goal_batch to match with non_final_next_states
+                non_final_goal_states = torch.cat([goal_batch[i:i+1] for i, mask in enumerate(non_final_mask) if mask], axis=0)
+                next_state_values[non_final_mask] = self.target_network(non_final_next_states, 
+                                                                        non_final_goal_states).max(1)[0].detach()
+            else:
+                next_state_values[non_final_mask] = self.target_network(non_final_next_states).max(1)[0].detach()
+        
+        next_state_values[~non_final_mask] = reward_batch[~non_final_mask] # value for terminal step is reward
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch
         loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
