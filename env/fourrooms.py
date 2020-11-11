@@ -74,7 +74,7 @@ class NewFourRoomsEnv(FourRoomsEnv):
             raise ValueError('which room???')
         
         self.seed(self.current_seed) # reseed back
-            
+        
         return pos
     
     def gen_obs(self, goal=False):
@@ -249,6 +249,8 @@ class FourRoomsTask:
     
     def reward(self, done):
         if self.reward_type=='sparse':
+            r = 0.0 if not done else 1.0
+        elif self.reward_type=='sparse2':
             r = -0.001 if not done else 1.0
         elif self.reward_type=='dense':
             r = -1.0 if not done else 0.0
@@ -338,4 +340,6 @@ class FourRoomsTask:
                           goalcond=self.goalcond, 
                           seed=self.grid_seed)
         x.set_phase(self.phase)
+        x.agent_ini_pos = self.agent_ini_pos
+        x.goal_pos = self.goal_pos
         return x

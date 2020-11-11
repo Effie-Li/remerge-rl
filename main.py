@@ -148,7 +148,7 @@ def run(run_ID,
         cuda_idx,
         task_type,
         reward_type,
-        memory):    
+        memory):
     
     device = torch.device("cuda:%d" % cuda_idx)
     
@@ -161,7 +161,8 @@ def run(run_ID,
     
     task = FourRoomsTask(task_type=task_type,
                          reward_type=reward_type,
-                         goalcond=True)
+                         goalcond=True,
+                         seed=32)
     obs = task.reset()
     if memory == 'replaybuffer':
         memory = ReplayBuffer()
