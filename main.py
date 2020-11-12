@@ -14,13 +14,13 @@ def train(task,
           agent,
           writer,
           num_epochs=1e6, 
-          max_steps=50,
+          max_steps=10,
           test_interval=100,
           target_update_interval=100,
           checkpoint_interval=1e4):
     
     # fill memory with random experience
-    test(task, agent, num_episodes=100, max_steps=100, remember=True, explore=True)
+    test(task, agent, num_episodes=10, max_steps=100, remember=True, explore=True)
     
     for i in range(int(num_epochs)):
         agent.step_count += 1 # change exploration criteria, really it's epoch count
@@ -48,7 +48,7 @@ def train(task,
             
             # -- training task test --
             test_results = test(task, agent, num_episodes=20, max_steps=max_steps, 
-                                remember=True, explore=False)
+                                remember=False, explore=False)
             if writer is not None:
                 writer.add_scalar('avg_n_step_train', np.mean(test_results['n_step']), i)
                 writer.add_scalar('avg_solved_train', np.mean(test_results['solved']), i)
@@ -125,7 +125,7 @@ def test(task,
                 if next_obs_list[i][2]:
                     next_state = None
                 goal = goals[i:i+1]
-            agent.memory.add(state, action, reward, next_state, goal)
+                agent.memory.add(state, action, reward, next_state, goal)
 
         # check performance
         current_remaining_tasks = remaining_tasks.copy()
@@ -159,16 +159,28 @@ def run(run_ID,
                                          datetime.now().strftime('%y%m%d%H%M'))
     writer = SummaryWriter(log_dir+run_key)
     
-    task = FourRoomsTask(task_type=task_type,
-                         reward_type=reward_type,
-                         goalcond=True,
-                         seed=32)
+    if task_type=='preset':
+        task = FourRoomsTask(task_type=task_type,
+                             agent_ini_pos=(2,2),
+                             goal_pos=(5,5),
+                             reward_type=reward_type,
+                             goalcond=True,
+                             seed=32)
+    else:
+        task = FourRoomsTask(task_type=task_type,
+                             reward_type=reward_type,
+                             goalcond=True,
+                             seed=32)
+    
+    if task_type in ['preset', 'sanity', 'fixed']:
+        print('task: ', task.agent_ini_pos, '-->', task.goal_pos)
+    
     obs = task.reset()
     if memory == 'replaybuffer':
         memory = ReplayBuffer()
     if memory == 'remerge':
         memory = RemergeMemory()
-        
+    
     agent = DQN(state_dim=obs['image'].shape, 
                 action_dim=4, 
                 goalcond=True, 

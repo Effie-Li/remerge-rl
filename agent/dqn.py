@@ -38,7 +38,7 @@ class DQN():
         self.BATCH_SIZE = 128
         self.GAMMA = 0.99
         self.EPS_START = 0.9
-        self.EPS_END = 0.05
+        self.EPS_END = 0.1
         self.EPS_DECAY = 250
     
     def select_action(self, qvals, explore=True):
@@ -123,7 +123,7 @@ class DQN():
             else:
                 next_state_values[non_final_mask] = self.target_network(non_final_next_states).max(1)[0].detach()
         
-        next_state_values[~non_final_mask] = reward_batch[~non_final_mask] # value for terminal step is reward
+        # final states will have next_state_values=0, making expected qval (0*gamma+reward)
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch
         loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 

@@ -203,7 +203,9 @@ class FourRoomsTask:
     def __init__(self, 
                  task_type='ti-1', 
                  reward_type='sparse', 
-                 goalcond=False, 
+                 goalcond=False,
+                 agent_ini_pos=None,
+                 goal_pos=None,
                  seed=None):
         
         # task = ti: transitive inference,
@@ -225,8 +227,8 @@ class FourRoomsTask:
             env = CHWWrapper(env)
         
         self.env = env
-        self.agent_ini_pos = None
-        self.goal_pos = None
+        self.agent_ini_pos = agent_ini_pos
+        self.goal_pos = goal_pos
         self.phase = 'train'
         
         self.reset()
@@ -261,7 +263,10 @@ class FourRoomsTask:
     
     def update_task(self, max_tries=1000):
         
-        if self.task_type == 'random':
+        if self.task_type == 'custom':
+            pass
+        
+        elif self.task_type == 'random':
             self.agent_ini_pos = self.env.sample_pos()
             self.goal_pos = self.env.sample_pos()
             
@@ -338,8 +343,8 @@ class FourRoomsTask:
         x = FourRoomsTask(task_type=self.task_type, 
                           reward_type=self.reward_type, 
                           goalcond=self.goalcond, 
+                          agent_ini_pos = self.agent_ini_pos,
+                          goal_pos = self.goal_pos,
                           seed=self.grid_seed)
         x.set_phase(self.phase)
-        x.agent_ini_pos = self.agent_ini_pos
-        x.goal_pos = self.goal_pos
         return x
