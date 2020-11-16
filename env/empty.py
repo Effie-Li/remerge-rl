@@ -264,7 +264,7 @@ class EmptyGridTask:
             
             self.agent_ini_pos = None
             self.goal_pos = None
-        
+    
     def clone(self):
         # return a copy of the task
         x = EmptyGridTask(size=self.size,

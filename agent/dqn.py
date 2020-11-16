@@ -32,7 +32,7 @@ class DQN():
             self.network = GridConvNet(h=h, w=w, n_out=action_dim).to(device)
         self.target_network = self.network.clone().to(device)
 
-        self.optim = torch.optim.RMSprop(self.network.parameters(), lr=1e-3)
+        self.optim = torch.optim.RMSprop(self.network.parameters(), lr=3e-4)
         
         self.step_count = 0
         self.BATCH_SIZE = 128

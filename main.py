@@ -15,6 +15,7 @@ def train(task,
           writer,
           num_epochs=1e5, 
           max_steps=50,
+          test_max_steps=50,
           test_interval=20,
           target_update_interval=10,
           checkpoint_interval=1e4):
@@ -65,7 +66,7 @@ def train(task,
         if i % test_interval == 0:
             
             # -- training task --
-            test_results = test(task, agent, num_episodes=20, max_steps=max_steps,
+            test_results = test(task, agent, num_episodes=20, max_steps=test_max_steps,
                                 remember=False, explore=False)
             if writer is not None:
                 writer.add_scalar('avg_n_step_train', np.mean(test_results['n_step']), i)
@@ -80,7 +81,7 @@ def train(task,
             
             # -- test task (may require generalization) --
             task.set_phase('test')
-            test_results = test(task, agent, num_episodes=20, max_steps=max_steps,
+            test_results = test(task, agent, num_episodes=20, max_steps=test_max_steps,
                                 remember=False, explore=False)
             if writer is not None:
                 writer.add_scalar('avg_n_step_test', np.mean(test_results['n_step']), i)
@@ -92,7 +93,7 @@ def train(task,
                 print('\t test avg_solved_test: ', np.mean(test_results['solved']))
                 print('\t test avg_reward_test: ', np.mean(test_results['reward']))
                 print('\t test avg_excess_step_train: ', np.mean(test_results['excess_steps']))
-                
+            
             task.set_phase('train')
 
         if i % checkpoint_interval == 0:
@@ -172,7 +173,9 @@ def run(log_dir,
         cuda_idx,
         task_type,
         reward_type,
-        memory):
+        memory,
+        train_max_steps,
+        test_max_steps):
     
     device = torch.device("cuda:%d" % cuda_idx)
     
@@ -199,19 +202,19 @@ def run(log_dir,
     if task_type in ['custom', 'sanity', 'fixed']:
         print('task: ', task.agent_ini_pos, '-->', task.goal_pos)
     
-    obs = task.reset()
-    if memory == 'replaybuffer':
-        memory = ReplayBuffer()
-    if memory == 'remerge':
-        memory = RemergeMemory()
+    if memory == 'regular':
+        self.memory = ReplayBuffer()
+    elif memory == 'remerge':
+        self.memory = RemergeMemory()
     
+    obs = task.reset()
     agent = DQN(state_dim=4, # state_dim=obs['image'].shape, 
                 action_dim=4, 
                 goalcond=True, 
                 device=device, 
                 memory=memory)
     
-    train(task, agent, writer=writer, max_steps=50)
+    train(task, agent, writer=writer, max_steps=train_max_steps, test_max_steps=test_max_steps)
     
     print('two thousand years later...')
 
@@ -222,10 +225,14 @@ if __name__ == '__main__':
     parser.add_argument('--cuda_idx', help='gpu to use', type=int, default=4)
     parser.add_argument('--task', help='task to run', default='custom')
     parser.add_argument('--reward', help='reward to use', default='euclidean')
-    parser.add_argument('--memory', help='memory to use', default='replaybuffer')
+    parser.add_argument('--memory', help='memory to use', default='regular')
+    parser.add_argument('--train_max_steps', default=50)
+    parser.add_argument('--test_max_steps', default=50)
     args = parser.parse_args()
     run(log_dir=args.log_dir,
         cuda_idx=args.cuda_idx,
         task_type=args.task,
         reward_type=args.reward,
-        memory=args.memory)
+        memory=args.memory,
+        train_max_steps=args.train_max_steps,
+        test_max_steps=args.test_max_steps)
