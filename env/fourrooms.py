@@ -33,7 +33,7 @@ class NewFourRoomsEnv(FourRoomsEnv):
         
         super().__init__()# super init calls reset
         # overwriting max_steps to prevent premature flagging of done (esp. with the action wrapper)
-        self.max_steps = max_steps=math.inf
+        self.max_steps = math.inf
     
     def reset(self, new_seed=None):
         # by default remains the same grid
@@ -49,7 +49,7 @@ class NewFourRoomsEnv(FourRoomsEnv):
     
     def change_goal_default_pos(self, new_pos):
         self._goal_default_pos = new_pos
-        
+    
     def sample_pos(self, room=None):
         # calls place_obj with obj=None only for sampling purposes
         # if need to avoid agent/goal overlap needs to make sure self.agent_pos is set before calling place_obj()
@@ -102,7 +102,7 @@ class NewFourRoomsEnv(FourRoomsEnv):
             }
 
             return obs
-        
+    
     def re_encode_grid(self, grid):
         # original: 1-empty, 2-wall, 8-goal
         # new: 0-empty, 1-wall, 2-goal
@@ -256,6 +256,11 @@ class FourRoomsTask:
             r = -0.001 if not done else 1.0
         elif self.reward_type=='dense':
             r = -1.0 if not done else 0.0
+        elif self.reward_type=='euclidean':
+            agent_pos = np.array(self.env.env.env.env.agent_pos)
+            goal_pos = np.array(self.goal_pos)
+            distance = np.sqrt(np.sum((agent_pos-goal_pos)**2))
+            r = -distance
         return r
     
     def set_phase(self, phase):

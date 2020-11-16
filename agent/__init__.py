@@ -1,2 +1,2 @@
-from .convnet import GridConvNet, ImgConvNet, GoalCondGridConvNet, GoalCondImgConvNet
+from .network import GoalCondGridSimpleNet, GridConvNet, ImgConvNet, GoalCondGridNet, GoalCondGridConvNet, GoalCondImgConvNet
 from .dqn import DQN

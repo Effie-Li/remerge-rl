@@ -5,7 +5,7 @@ import torch
 import torch.nn
 import torch.nn.functional as F
 from itertools import count
-from . import GridConvNet, GoalCondGridConvNet
+from . import GoalCondGridSimpleNet, GoalCondGridNet, GridConvNet, GoalCondGridConvNet
 
 class DQN():
     '''
@@ -20,26 +20,26 @@ class DQN():
                  goalcond=False):
         
         self.state_dim = state_dim # [C, H, W]
-        c, h, w = state_dim
+        # c, h, w = state_dim
         self.action_dim = action_dim
         self.device = device
         self.memory = memory
         self.goalcond = goalcond
         
         if self.goalcond:
-            self.network = GoalCondGridConvNet(h=h, w=w, n_out=action_dim).to(device)
+            self.network = GoalCondGridSimpleNet(n_in=self.state_dim, n_out=action_dim).to(device)
         else:
             self.network = GridConvNet(h=h, w=w, n_out=action_dim).to(device)
         self.target_network = self.network.clone().to(device)
 
-        self.optim = torch.optim.RMSprop(self.network.parameters())
+        self.optim = torch.optim.RMSprop(self.network.parameters(), lr=1e-3)
         
         self.step_count = 0
         self.BATCH_SIZE = 128
         self.GAMMA = 0.99
         self.EPS_START = 0.9
         self.EPS_END = 0.1
-        self.EPS_DECAY = 250
+        self.EPS_DECAY = 200
     
     def select_action(self, qvals, explore=True):
         
