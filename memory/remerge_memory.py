@@ -49,8 +49,18 @@ class RemergeMemory(ReplayBuffer):
         new_link = Linked(*(state, next_state, step))
 
         if self.find_link(self.links, new_link) != -1:
-            # memory link exists, don't need to adjust memory network weights
-            return
+            # memory link exists, add a 2-step link instead
+            all_ns = self.find_all_ns(state)
+            can_add = False
+            for ns in all_ns:
+                l = Linked(*(state, ns, 2))
+                if self.find_link(self.links, l) == -1:
+                    can_add = True
+            if not can_add:
+                # all related 2-step transitions exist
+                return
+            else:
+                new_link = l
 
         # TODO: maintain num_slots in all of (links, states, next_states)
         # TODO: when memory is freed up need to update weights
@@ -58,7 +68,19 @@ class RemergeMemory(ReplayBuffer):
             # assuming implementation is correct, effective length of
             # states and next_states will always be <= links, so
             # we only need to check link capacity and free things accordingly
-            pass
+            self.links.popleft()
+            # shift weights
+            # reset all connections to oldest link @ hidden_index=0
+            self.attractor_network.weights['s2h'] = np.concatenate((self.attractor_network.weights['s2h'][:, 1:], 
+                                                                    np.zeros((self.hidden_size, 1))), axis=1)
+            self.attractor_network.weights['ns2h'] = np.concatenate((self.attractor_network.weights['ns2h'][:, 1:], 
+                                                                     np.zeros((self.hidden_size, 1))), axis=1)
+            
+            # reset all connections from oldest link @ hidden_index=0
+            self.attractor_network.weights['h2s'] = np.concatenate((self.attractor_network.weights['h2s'][1:, :],
+                                                                    np.zeros((1, self.state_size,))), axis=0)
+            self.attractor_network.weights['h2ns'] = np.concatenate((self.attractor_network.weights['h2ns'][1:, :],
+                                                                     np.zeros((1, self.state_size,))), axis=0)
 
         self.links.append(new_link)
         link_index = len(self.links)-1
@@ -163,7 +185,7 @@ class RemergeMemory(ReplayBuffer):
         
         # form plan
         plan_indexes = self.activation_to_indexes(activation_buffer['nsact'][:-1], mode=mode)
-        print('plan_indexes: ', plan_indexes)
+#         print('plan_indexes: ', plan_indexes)
         plan_keys = [self.index_to_onehot(ind, self.state_size) for ind in plan_indexes]
         # retrieve content from memory
         plan = [self.retrieve_instance(self.all_states, key) for key in plan_keys]
@@ -214,5 +236,9 @@ class RemergeMemory(ReplayBuffer):
         key[i] = 1.
         return key
     
-    def forget(self):
-        pass
+    def find_all_ns(self, s):
+        x = []
+        for l in self.links:
+            if np.array_equal(s, l.state1):
+                x.append(self.find_state(self.all_states, l.state2))
+        return x

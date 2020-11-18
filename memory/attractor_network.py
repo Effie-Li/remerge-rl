@@ -13,10 +13,10 @@ class AttractorNetwork:
                  raw_excite_weight=1.0,
                  raw_inhibit_weight=0.0,
                  weight_scale=1.0,
-                 i_tau= 0.01,
+                 i_tau=0.04,
                  h_tau=0.04, 
                  h_C=0.,
-                 lmda=0.01, 
+                 lmda=0.1, 
                  ext=10.0):
         
         self.hidden_size = hidden_size
@@ -57,9 +57,9 @@ class AttractorNetwork:
             new_weights[new_weights==0.0] = self.inhibit
 
         elif mode == 'del':
-            new_weights[post_index] = inhibit
+            new_weights[post_index] = self.inhibit
             # if no more excitatory connections change all weights to zero
-            if sum(new_weights==excite) == 0:
+            if sum(new_weights==self.excite) == 0:
                 new_weights = np.zeros(len(new_weights))
 
         self.weights[weight_dict_key][pre_index] = new_weights
