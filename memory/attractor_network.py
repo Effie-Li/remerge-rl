@@ -17,7 +17,7 @@ class AttractorNetwork:
                  h_tau=0.04, 
                  h_C=0.,
                  lmda=0.1, 
-                 ext=10.0):
+                 ext=0.2):
         
         self.hidden_size = hidden_size
         self.state_size = state_size
@@ -66,7 +66,7 @@ class AttractorNetwork:
 
     def i_activation(self, netin):
         # logistic
-        # return np.array([1/(1+np.exp(-x/self.i_tau)) for x in netin])
+        # return np.array([1/(1+np.exp(-x/self.i_tau)) for x in netin]) - 0.5 # i don't want zero memories to be activated
         # softmax
         # NOTE: on non-zero values only, to ensure empty memory slots don't get chosen
         non_zero_mask = netin!=0.0
