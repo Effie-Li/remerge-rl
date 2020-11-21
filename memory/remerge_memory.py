@@ -38,8 +38,8 @@ class RemergeMemory(ReplayBuffer):
         if next_state is None:
             next_state = goal # arrived at goal
         
-        state = state.detach().cpu().numpy()[0]
-        next_state = next_state.detach().cpu().numpy()[0]
+#         state = state.detach().cpu().numpy()[0]
+#         next_state = next_state.detach().cpu().numpy()[0]
         
         # if state == next_state, non-meaninful transtiion, don't remember lol
         if np.array_equal(state, next_state):
@@ -56,7 +56,7 @@ class RemergeMemory(ReplayBuffer):
                        for nns in all_nns]
             if np.sum(can_add) == 0: # all related step+1 transitions exist
                 return
-            else: # go on and add a step+1 transition
+            elif (link.step+1 <= 4): # go on and add a step+1 transition
                 new_link = l
             return
 
@@ -95,7 +95,7 @@ class RemergeMemory(ReplayBuffer):
         self.attractor_network.update_weights('ns2h', pre_index=next_state_index, post_index=link_index, mode='add')
         self.attractor_network.update_weights('h2ns', pre_index=link_index, post_index=next_state_index, mode='add')
     
-    def plan(self, s_probe=None, ns_probe=None, plan_steps=4, T=100, mode='sample'):
+    def plan(self, s_probe=None, ns_probe=None, n_level=1, T=5, mode='sample'):
         
         # probes are in memory content space (e.g. [C,H,W])
         # self.attractor_network.forward can take None inputs
@@ -107,7 +107,7 @@ class RemergeMemory(ReplayBuffer):
         
         if s_probe is None and ns_probe is None:
             print("what do you want from meee??")
-            return []
+            return None
         
         # turn probes into keys
         s_index = self.find_state(self.all_states, s_probe) if s_probe is not None else -1
@@ -115,154 +115,48 @@ class RemergeMemory(ReplayBuffer):
         ns_index = self.find_state(self.all_states, ns_probe) if ns_probe is not None else -1
         ns_in = self.index_to_onehot(ns_index, self.state_size) if ns_index != -1 else None
         
-        if plan_steps==0:
-            # just activate the linked memories, no multiple copies needed
-            n = self.attractor_network.clone()
-            
-            for t in range(T):
-                sact, nsact, hact = n.forward(s_in=s_in, ns_in=ns_in)
-            
-            if ns_probe is None:
-                plan_indexes = self.activation_to_indexes(nsact, mode=mode)
-                plan_keys = [self.index_to_onehot(ind, self.state_size) for ind in plan_indexes]
-                plan = [self.retrieve_instance(self.all_states, key) for key in plan_keys]
-            else: # hopefully s_probe is None:
-                plan_indexes = self.activation_to_indexes(sact, mode=mode)
-                plan_keys = [self.index_to_onehot(ind, self.state_size) for ind in plan_indexes]
-                plan = [self.retrieve_instance(self.all_states, key) for key in plan_keys]
-            return plan
-
-        # make copies of the attractor network
-        sub_networks = [self.attractor_network.clone() for _ in range(plan_steps+1)]
-        activations = self.run_recurrence(s_in, ns_in, sub_networks, T)
+        if s_index == -1 and ns_index == -1:
+            # neither in memory...
+            return None
         
-        # form plan
-        plan_indexes = self.activation_to_indexes(activations['nsact'][:-1], mode=mode)
-        plan_keys = [self.index_to_onehot(ind, self.state_size) for ind in plan_indexes]
-        # retrieve content from memory
-        plan = [self.retrieve_instance(self.all_states, key) for key in plan_keys]
-
-        return plan
-    
-    def run_recurrence(self, s_in, ns_in, sub_networks, T):
+        n1 = self.attractor_network.clone()
+        n2 = self.attractor_network.clone()
         
-        activation_buffer = {'sact': np.zeros((len(sub_networks), self.state_size)),
-                             'nsact':np.zeros((len(sub_networks), self.state_size)),
-                             'hact':np.zeros((len(sub_networks), self.hidden_size))}
+        for t in range(n_level):
+            # propogate successor info in n1 and predecessor info in n2
+            if t==0:
+                n1sact, n1nsact, n1hact = n1.forward(s_in=s_in, binarize=True)
+                n1sact, n1nsact, n1hact = n1.forward(s_in=s_in, binarize=True)
+                n2sact, n2nsact, n2hact = n2.forward(ns_in=ns_in, binarize=True)
+                n2sact, n2nsact, n2hact = n2.forward(ns_in=ns_in, binarize=True)
+            else:
+                n1sact, n1nsact, n1hact = n1.forward(s_in=n1nsact, binarize=True)
+                n1sact, n1nsact, n1hact = n1.forward(s_in=n1nsact, binarize=True)
+                n2sact, n2nsact, n2hact = n2.forward(ns_in=n2sact, binarize=True)
+                n2sact, n2nsact, n2hact = n2.forward(ns_in=n2sact, binarize=True)
         
-        # insert probes
-        sact, nsact, hact = sub_networks[0].forward(s_in=s_in, ns_in=None)
-        activation_buffer['sact'][0] = sact
-        activation_buffer['nsact'][0] = nsact
-        activation_buffer['hact'][0] = hact
-        sact, nsact, hact = sub_networks[-1].forward(s_in=None, ns_in=ns_in)
-        activation_buffer['sact'][-1] = sact
-        activation_buffer['nsact'][-1] = nsact
-        activation_buffer['hact'][-1] = hact
+        n1.clean_buffer()
+        n2.clean_buffer()
         
-        # run recurrent computation and settle (?) on plan
-        # TODO: check convergence?
-        # keep injecting s_in and ns_in at both ends
-        
+        # check overlap
         for t in range(T):
-            
-            # TODO: how best to implement recurrence on this system?
-            
-            # from side to center
-#             for i in range(len(sub_networks)//2):
-#                 n = i
-#                 if i==0: # first network
-#                     s = None # s_in
-#                     ns = activation_buffer['sact'][n+1]
-#                 else:
-#                     s = activation_buffer['nsact'][n-1]
-#                     ns = activation_buffer['sact'][n+1]
-                
-#                 sact, nsact, hact = sub_networks[n].forward(s_in=s, ns_in=ns)
-#                 activation_buffer['sact'][n] = sact
-#                 activation_buffer['nsact'][n] = nsact
-#                 activation_buffer['hact'][n] = hact
-                
-#                 n = len(sub_networks)-1-i
-#                 if i==0: # last network
-#                     s = activation_buffer['nsact'][n-1]
-#                     ns = None # ns_in
-#                 else:
-#                     s = activation_buffer['nsact'][n-1]
-#                     ns = activation_buffer['sact'][n+1]
-                
-#                 sact, nsact, hact = sub_networks[n].forward(s_in=s, ns_in=ns)
-#                 activation_buffer['sact'][n] = sact
-#                 activation_buffer['nsact'][n] = nsact
-#                 activation_buffer['hact'][n] = hact
-                
-#             if len(sub_networks) % 2 != 0:
-#                 # deal with the middle one when there is an odd number of networks
-#                 n = len(sub_networks)//2
-#                 s = activation_buffer['nsact'][n-1]
-#                 ns = activation_buffer['sact'][n+1]
-#                 sact, nsact, hact = sub_networks[n].forward(s_in=s, ns_in=ns)
-#                 activation_buffer['sact'][n] = sact
-#                 activation_buffer['nsact'][n] = nsact
-#                 activation_buffer['hact'][n] = hact
-            
-#             # from center to side
-#             for i in reversed(range(len(sub_networks)//2)):
-#                 n = i
-#                 if i==0: # first network
-#                     s = None # s_in
-#                     ns = activation_buffer['sact'][n+1]
-#                 else:
-#                     s = activation_buffer['nsact'][n-1]
-#                     ns = activation_buffer['sact'][n+1]
-                
-#                 sact, nsact, hact = sub_networks[n].forward(s_in=s, ns_in=ns)
-#                 activation_buffer['sact'][n] = sact
-#                 activation_buffer['nsact'][n] = nsact
-#                 activation_buffer['hact'][n] = hact
-                
-#                 n = len(sub_networks)-1-i
-#                 if i==0: # last network
-#                     s = activation_buffer['nsact'][n-1]
-#                     ns = None # ns_in
-#                 else:
-#                     s = activation_buffer['nsact'][n-1]
-#                     ns = activation_buffer['sact'][n+1]
-                
-#                 sact, nsact, hact = sub_networks[n].forward(s_in=s, ns_in=ns)
-#                 activation_buffer['sact'][n] = sact
-#                 activation_buffer['nsact'][n] = nsact
-#                 activation_buffer['hact'][n] = hact
-            
-            for n in range(len(sub_networks)):
-                if n==0: # first network
-                    sact, nsact, hact = sub_networks[n].forward()
-                else:
-                    s = activation_buffer['nsact'][n-1] # next_state from the previous sub network
-                    sact, nsact, hact = sub_networks[n].forward(s_in=s)
-                activation_buffer['sact'][n] = sact
-                activation_buffer['nsact'][n] = nsact
-                activation_buffer['hact'][n] = hact
+            sact, nsact, hact = n1.forward(s_in=n1nsact, ns_in=n2sact)
         
-            for n in reversed(range(len(sub_networks))): # skip last network
-                if n==len(sub_networks)-1: # last network
-                    sact, nsact, hact = sub_networks[n].forward()
-                else:
-                    ns = activation_buffer['sact'][n+1] # state from the next sub network
-                    sact, nsact, hact = sub_networks[n].forward(ns_in=ns)
-                activation_buffer['sact'][n] = sact
-                activation_buffer['nsact'][n] = nsact
-                activation_buffer['hact'][n] = hact
-        
-        return activation_buffer
+        s_index = self.activation_to_index(sact.flatten(), mode=mode)
+        s_key = self.index_to_onehot(s_index, self.state_size)
+        s = self.retrieve_instance(self.all_states, s_key)
+        ns_index = self.activation_to_index(nsact.flatten(), mode=mode)
+        ns_key = self.index_to_onehot(ns_index, self.state_size)
+        ns = self.retrieve_instance(self.all_states, ns_key)
+        return s, ns
     
-    def activation_to_indexes(self, activation, mode='max'):
+    def activation_to_index(self, activation, mode='max'):
         # activations is shape [B, state_size]
         if mode=='max':
-            plan_indexes = np.argmax(activation, axis=-1)
+            index = np.argmax(activation, axis=-1)
         elif mode=='sample':
-            plan_indexes = list(map(self.sample_state, activation))
-        return plan_indexes
+            index = self.sample_state(activation) # list(map(self.sample_state, activation))
+        return index
     
     def sample_state(self, probs):
         elements = list(range(self.state_size))
@@ -270,6 +164,7 @@ class RemergeMemory(ReplayBuffer):
             s = np.random.choice(elements, 1, p=probs)[0]
         except:
             # if no state was activated, probs don't sum to one and numpy complains
+            print('random sampling!!')
             s = np.random.choice(list(range(len(self.all_states))), 1)[0]
         return s
 
