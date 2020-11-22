@@ -49,16 +49,21 @@ class RemergeMemory(ReplayBuffer):
         new_link = Linked(*(state, next_state, step))
 
         if self.find_link(self.links, new_link) != -1:
-            # memory link exists, add a step+1 link instead
-            link = self.links[self.find_link(self.links, new_link)]
-            all_nns = self.find_all_ns(next_state) # next next state
-            can_add = [self.find_link(self.links, Linked(*(state, nns, link.step+1)))!=-1
-                       for nns in all_nns]
-            if np.sum(can_add) == 0: # all related step+1 transitions exist
+            # memory link exists, add a 2-step links instead
+            all_nns = self.find_all_ns(new_link.state2)
+            if len(all_nns)==0: # no available further states
                 return
-            elif (link.step+1 <= 4): # go on and add a step+1 transition
-                new_link = l
-            return
+            can_add = False
+            for nns in all_nns:
+                if np.array_equal(new_link.state1, nns):
+                    # the reversal transition,  ignore
+                    continue
+                new_link = Linked(*(new_link.state1, nns, new_link.step+1))
+                if self.find_link(self.links, new_link) == -1:
+                    can_add = True
+                    break
+            if not can_add:
+                return
 
         # maintain size of self.links
         # TODO: maintain size of self.all_states
@@ -95,7 +100,7 @@ class RemergeMemory(ReplayBuffer):
         self.attractor_network.update_weights('ns2h', pre_index=next_state_index, post_index=link_index, mode='add')
         self.attractor_network.update_weights('h2ns', pre_index=link_index, post_index=next_state_index, mode='add')
     
-    def plan(self, s_probe=None, ns_probe=None, n_level=1, T=5, mode='sample'):
+    def plan(self, s_probe=None, ns_probe=None, n_level=1, T=4, mode='sample'):
         
         # probes are in memory content space (e.g. [C,H,W])
         # self.attractor_network.forward can take None inputs
@@ -203,5 +208,5 @@ class RemergeMemory(ReplayBuffer):
         x = []
         for l in self.links:
             if np.array_equal(s, l.state1):
-                x.append(self.find_state(self.all_states, l.state2))
+                x.append(self.all_states[self.find_state(self.all_states, l.state2)])
         return x
