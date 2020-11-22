@@ -34,71 +34,83 @@ class RemergeMemory(ReplayBuffer):
     
     def add(self, state, action, reward, next_state, goal):
         super().add(state, action, reward, next_state, goal)
+    
+    def wire_memory(self):
         
-        if next_state is None:
-            next_state = goal # arrived at goal
+        self.attractor_network.clean_weights()
+        self.attractor_network.clean_buffer()
+        self.all_states = deque() # unique states remembered
+        self.links = deque()
         
-#         state = state.detach().cpu().numpy()[0]
-#         next_state = next_state.detach().cpu().numpy()[0]
+        for transition in self.memory:
+            state = transition.state
+            next_state = transition.next_state
         
-        # if state == next_state, non-meaninful transtiion, don't remember lol
-        if np.array_equal(state, next_state):
-            return
-        
-        step = 1 # incoming links are always 1-step transitions
-        new_link = Linked(*(state, next_state, step))
+            if next_state is None:
+                next_state = transition.goal # arrived at goal
 
-        if self.find_link(self.links, new_link) != -1:
-            # memory link exists, add a 2-step links instead
-            all_nns = self.find_all_ns(new_link.state2)
-            if len(all_nns)==0: # no available further states
-                return
-            can_add = False
-            for nns in all_nns:
-                if np.array_equal(new_link.state1, nns):
-                    # the reversal transition,  ignore
-                    continue
-                new_link = Linked(*(new_link.state1, nns, new_link.step+1))
-                if self.find_link(self.links, new_link) == -1:
-                    can_add = True
-                    break
-            if not can_add:
+            state = state.detach().cpu().numpy()[0]
+            next_state = next_state.detach().cpu().numpy()[0]
+
+            # if state == next_state, non-meaninful transtiion, don't remember lol
+            if np.array_equal(state, next_state):
                 return
 
-        # maintain size of self.links
-        # TODO: maintain size of self.all_states
-        if len(self.links) > self.hidden_size:
-            self.links.popleft()
-            # link indexes shifted left, shift weights accordingly
-            # reset connections to and from the empty right most position in deque
-            self.attractor_network.weights['s2h'] = np.concatenate((self.attractor_network.weights['s2h'][:, 1:], 
-                                                                    np.zeros((self.state_size, 1))), axis=1)
-            self.attractor_network.weights['ns2h'] = np.concatenate((self.attractor_network.weights['ns2h'][:, 1:], 
-                                                                     np.zeros((self.state_size, 1))), axis=1)
-            
-            self.attractor_network.weights['h2s'] = np.concatenate((self.attractor_network.weights['h2s'][1:, :],
-                                                                    np.zeros((1, self.state_size,))), axis=0)
-            self.attractor_network.weights['h2ns'] = np.concatenate((self.attractor_network.weights['h2ns'][1:, :],
-                                                                     np.zeros((1, self.state_size,))), axis=0)
+            # maintain size of self.links
+            # TODO: maintain size of self.all_states
+            if len(self.links) == self.hidden_size:
+                # make room for the new link
+                self.links.popleft()
+                # link indexes shifted left, shift weights accordingly
+                # reset connections to and from the empty right most position in deque
+                self.attractor_network.weights['s2h'] = np.concatenate((self.attractor_network.weights['s2h'][:, 1:], 
+                                                                        np.zeros((self.state_size, 1))), axis=1)
+                self.attractor_network.weights['ns2h'] = np.concatenate((self.attractor_network.weights['ns2h'][:, 1:], 
+                                                                         np.zeros((self.state_size, 1))), axis=1)
 
-        self.links.append(new_link)
-        link_index = len(self.links)-1
+                self.attractor_network.weights['h2s'] = np.concatenate((self.attractor_network.weights['h2s'][1:, :],
+                                                                        np.zeros((1, self.state_size))), axis=0)
+                self.attractor_network.weights['h2ns'] = np.concatenate((self.attractor_network.weights['h2ns'][1:, :],
+                                                                         np.zeros((1, self.state_size))), axis=0)
 
-        state_index = self.find_state(self.all_states, state)
-        if state_index == -1:
-            self.all_states.append(state)
-            state_index = len(self.all_states)-1
+            step = 1 # incoming links are always 1-step transitions
+            new_link = Linked(*(state, next_state, step))
 
-        next_state_index = self.find_state(self.all_states, next_state)
-        if next_state_index == -1:
-            self.all_states.append(next_state)
-            next_state_index = len(self.all_states)-1
+            if self.find_link(self.links, new_link) != -1:
+                # memory link exists, add a 2-step links instead
+                all_nns = self.find_all_ns(new_link.state2)
+                if len(all_nns)==0: # no available further states
+                    return
+                can_add = False
+                for nns in all_nns:
+                    if np.array_equal(new_link.state1, nns):
+                        # the reversal transition,  ignore
+                        continue
+                    new_link = Linked(*(new_link.state1, nns, new_link.step+1))
+                    if self.find_link(self.links, new_link) == -1:
+                        can_add = True
+                        break
+                if not can_add:
+                    return
 
-        # construct new weights as memory comes in
-        self.attractor_network.update_weights('s2h', pre_index=state_index, post_index=link_index, mode='add')
-        self.attractor_network.update_weights('h2s', pre_index=link_index, post_index=state_index, mode='add')
-        self.attractor_network.update_weights('ns2h', pre_index=next_state_index, post_index=link_index, mode='add')
-        self.attractor_network.update_weights('h2ns', pre_index=link_index, post_index=next_state_index, mode='add')
+            self.links.append(new_link)
+            link_index = len(self.links)-1
+
+            state_index = self.find_state(self.all_states, state)
+            if state_index == -1:
+                self.all_states.append(state)
+                state_index = len(self.all_states)-1
+
+            next_state_index = self.find_state(self.all_states, next_state)
+            if next_state_index == -1:
+                self.all_states.append(next_state)
+                next_state_index = len(self.all_states)-1
+
+            # construct new weights as memory comes in
+            self.attractor_network.update_weights('s2h', pre_index=state_index, post_index=link_index, mode='add')
+            self.attractor_network.update_weights('h2s', pre_index=link_index, post_index=state_index, mode='add')
+            self.attractor_network.update_weights('ns2h', pre_index=next_state_index, post_index=link_index, mode='add')
+            self.attractor_network.update_weights('h2ns', pre_index=link_index, post_index=next_state_index, mode='add')
     
     def plan(self, s_probe=None, ns_probe=None, n_level=1, T=4, mode='sample'):
         
@@ -120,8 +132,8 @@ class RemergeMemory(ReplayBuffer):
         ns_index = self.find_state(self.all_states, ns_probe) if ns_probe is not None else -1
         ns_in = self.index_to_onehot(ns_index, self.state_size) if ns_index != -1 else None
         
-        if s_index == -1 and ns_index == -1:
-            # neither in memory...
+        if s_index == -1 or ns_index == -1:
+            # not in memory...
             return None
         
         n1 = self.attractor_network.clone()
@@ -169,7 +181,7 @@ class RemergeMemory(ReplayBuffer):
             s = np.random.choice(elements, 1, p=probs)[0]
         except:
             # if no state was activated, probs don't sum to one and numpy complains
-            print('random sampling!!')
+            # print('random sampling!')
             s = np.random.choice(list(range(len(self.all_states))), 1)[0]
         return s
 

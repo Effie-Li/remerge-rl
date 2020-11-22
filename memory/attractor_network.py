@@ -126,6 +126,14 @@ class AttractorNetwork:
             'h':np.zeros((1, self.hidden_size))
         }
     
+    def clean_weights(self):
+        self.weights = {
+            's2h':np.zeros((self.state_size, self.hidden_size)),
+            'h2s':np.zeros((self.hidden_size, self.state_size)),
+            'ns2h':np.zeros((self.state_size, self.hidden_size)),
+            'h2ns':np.zeros((self.hidden_size, self.state_size)),
+        }
+    
     def clone(self):
         x = AttractorNetwork(hidden_size=self.hidden_size, 
                              state_size=self.state_size, 
