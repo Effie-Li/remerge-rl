@@ -16,6 +16,7 @@ def train(task,
           use_remerge=False,
           replan_prob=0.5,
           switch_goal_prob=0.5,
+          n_level=1,
           num_epochs=2e4,
           max_steps=50,
           test_max_steps=50,
@@ -90,6 +91,7 @@ def train(task,
                                 use_remerge=use_remerge, 
                                 replan_prob=replan_prob,
                                 switch_goal_prob=switch_goal_prob,
+                                n_level=n_level,
                                 num_episodes=20, max_steps=test_max_steps,
                                 remember=False, explore=False)
             if writer is not None:
@@ -113,6 +115,7 @@ def test(task,
          use_remerge=False,
          replan_prob=0.5,
          switch_goal_prob=0.5,
+         n_level=1,
          num_episodes=20,
          max_steps=50,
          remember=False,
@@ -140,7 +143,7 @@ def test(task,
     plans = [None] * len(remaining_tasks)
     switch_probs = np.linspace(switch_goal_prob, 0, num=max_steps//2).tolist() + [0.0] * (max_steps-max_steps//2)
     
-    if use_remerge: # wire the memory
+    if use_remerge:
         agent.memory.wire_memory()
     
     for t in range(max_steps):
@@ -157,7 +160,8 @@ def test(task,
                     # with some probability generate new subgoal
                     if random.random() < replan_prob:
                         plans[i] = agent.memory.plan(s_probe=states[i,...].detach().cpu().numpy(),
-                                                     ns_probe=goals[i,...].detach().cpu().numpy())
+                                                     ns_probe=goals[i,...].detach().cpu().numpy(),
+                                                     n_level=n_level)
                     if plans[i] is not None:
                         subgoal = plans[i][random.choice([0,1])]
                         modified_goals[i] = torch.from_numpy(np.array(subgoal).astype(np.float32))
@@ -211,7 +215,8 @@ def run(log_dir,
         train_max_steps,
         test_max_steps,
         replan_prob,
-        switch_goal_prob):
+        switch_goal_prob,
+        n_level):
     
     device = torch.device("cuda:%d" % cuda_idx)
     
@@ -241,7 +246,8 @@ def run(log_dir,
           test_max_steps=test_max_steps,
           use_remerge=use_remerge,
           replan_prob=replan_prob,
-          switch_goal_prob=switch_goal_prob)
+          switch_goal_prob=switch_goal_prob,
+          n_level=n_level)
     
     print('two thousand years later...')
 
@@ -254,11 +260,12 @@ if __name__ == '__main__':
     parser.add_argument('--task', help='task to run', default='custom')
     parser.add_argument('--reward', help='reward to use', default='euclidean')
     parser.add_argument('--memory', help='memory to use', default='regular')
-    parser.add_argument('--remerge_size', type=int, default=2000)
+    parser.add_argument('--remerge_size', type=int, default=1000)
     parser.add_argument('--train_max_steps', type=int, default=50)
     parser.add_argument('--test_max_steps', type=int, default=50)
     parser.add_argument('--replan_prob', type=float, default=0.5)
     parser.add_argument('--switch_goal_prob', type=float, default=0.5)
+    parser.add_argument('--n_level', type=int, default=1)
     args = parser.parse_args()
     run(log_dir=args.log_dir,
         cuda_idx=args.cuda_idx,
@@ -269,4 +276,5 @@ if __name__ == '__main__':
         train_max_steps=args.train_max_steps,
         test_max_steps=args.test_max_steps,
         replan_prob=args.replan_prob,
-        switch_goal_prob=args.switch_goal_prob)
+        switch_goal_prob=args.switch_goal_prob,
+        n_level=args.n_level)

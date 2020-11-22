@@ -16,7 +16,7 @@ class AttractorNetwork:
                  i_tau=0.04,
                  h_tau=0.04, 
                  h_C=0.,
-                 lmda=0.1, 
+                 lmda=0.2, 
                  ext=0.2):
         
         self.hidden_size = hidden_size

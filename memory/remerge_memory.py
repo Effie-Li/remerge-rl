@@ -17,6 +17,7 @@ class RemergeMemory(ReplayBuffer):
                  batch_size=32,
                  hidden_size=1000, 
                  state_size=1000,
+                 max_higher_order_transition=6,
                  **kwargs):
         
         # self.memory is inherited from super, functions as the default batch sampling buffer
@@ -27,6 +28,7 @@ class RemergeMemory(ReplayBuffer):
         
         self.hidden_size = hidden_size
         self.state_size = state_size
+        self.max_higher_order_transition = max_higher_order_transition
         
         self.attractor_network = AttractorNetwork(hidden_size, state_size, **kwargs)
         self.all_states = deque() # unique states remembered
@@ -39,7 +41,7 @@ class RemergeMemory(ReplayBuffer):
         
         self.attractor_network.clean_weights()
         self.attractor_network.clean_buffer()
-        self.all_states = deque() # unique states remembered
+        self.all_states = deque()
         self.links = deque()
         
         for transition in self.memory:
@@ -77,21 +79,22 @@ class RemergeMemory(ReplayBuffer):
             new_link = Linked(*(state, next_state, step))
 
             if self.find_link(self.links, new_link) != -1:
-                # memory link exists, add a 2-step links instead
-                all_nns = self.find_all_ns(new_link.state2)
+                # memory link exists, add a higher-order link instead
+                all_nns, all_steps = self.find_all_ns(new_link.state2)
                 if len(all_nns)==0: # no available further states
-                    return
+                    continue
                 can_add = False
-                for nns in all_nns:
-                    if np.array_equal(new_link.state1, nns):
-                        # the reversal transition,  ignore
+                for i, nns in enumerate(all_nns):
+                    if np.array_equal(new_link.state1, nns) or all_steps[i]+1>self.max_higher_order_transition:
+                        # the reversal transition or it's too high-order, ignore
                         continue
-                    new_link = Linked(*(new_link.state1, nns, new_link.step+1))
-                    if self.find_link(self.links, new_link) == -1:
+                    higher_link = Linked(*(new_link.state1, nns, all_steps[i]+1))
+                    if self.find_link(self.links, higher_link) == -1:
                         can_add = True
+                        new_link = higher_link
                         break
                 if not can_add:
-                    return
+                    continue
 
             self.links.append(new_link)
             link_index = len(self.links)-1
@@ -151,9 +154,8 @@ class RemergeMemory(ReplayBuffer):
                 n1sact, n1nsact, n1hact = n1.forward(s_in=n1nsact, binarize=True)
                 n2sact, n2nsact, n2hact = n2.forward(ns_in=n2sact, binarize=True)
                 n2sact, n2nsact, n2hact = n2.forward(ns_in=n2sact, binarize=True)
-        
-        n1.clean_buffer()
-        n2.clean_buffer()
+            n1.clean_buffer()
+            n2.clean_buffer()
         
         # check overlap
         for t in range(T):
@@ -181,7 +183,7 @@ class RemergeMemory(ReplayBuffer):
             s = np.random.choice(elements, 1, p=probs)[0]
         except:
             # if no state was activated, probs don't sum to one and numpy complains
-            # print('random sampling!')
+            print('random sampling!')
             s = np.random.choice(list(range(len(self.all_states))), 1)[0]
         return s
 
@@ -217,8 +219,10 @@ class RemergeMemory(ReplayBuffer):
         return key
     
     def find_all_ns(self, s):
-        x = []
+        nss = []
+        steps = []
         for l in self.links:
             if np.array_equal(s, l.state1):
-                x.append(self.all_states[self.find_state(self.all_states, l.state2)])
-        return x
+                nss.append(self.all_states[self.find_state(self.all_states, l.state2)])
+                steps.append(l.step)
+        return nss, steps
