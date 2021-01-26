@@ -21,7 +21,7 @@ class RemergeMemory(ReplayBuffer):
                  **kwargs):
         
         # self.memory is inherited from super, functions as the default batch sampling buffer
-        # self.remerge is the memory network that does recurrent computation on onehot memory keys
+        # self.attractor_network is the memory network that does recurrent computation on memory keys
         # self.states, next_states, and links are the corresponding content storage for self.remerge
         
         super().__init__(num_slot=num_slot, batch_size=batch_size)
@@ -162,9 +162,12 @@ class RemergeMemory(ReplayBuffer):
             sact, nsact, hact = n1.forward(s_in=n1nsact, ns_in=n2sact)
         
         s_index = self.activation_to_index(sact.flatten(), mode=mode)
+        ns_index = self.activation_to_index(nsact.flatten(), mode=mode)
+        if s_index is None or ns_index is None:
+            return
+        
         s_key = self.index_to_onehot(s_index, self.state_size)
         s = self.retrieve_instance(self.all_states, s_key)
-        ns_index = self.activation_to_index(nsact.flatten(), mode=mode)
         ns_key = self.index_to_onehot(ns_index, self.state_size)
         ns = self.retrieve_instance(self.all_states, ns_key)
         return s, ns
@@ -183,8 +186,7 @@ class RemergeMemory(ReplayBuffer):
             s = np.random.choice(elements, 1, p=probs)[0]
         except:
             # if no state was activated, probs don't sum to one and numpy complains
-            print('random sampling!')
-            s = np.random.choice(list(range(len(self.all_states))), 1)[0]
+            s = None
         return s
 
     def find_link(self, links, link):

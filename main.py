@@ -141,7 +141,7 @@ def test(task,
     goals = torch.from_numpy(goals.astype(np.float32)).to(agent.device)
     
     plans = [None] * len(remaining_tasks)
-    switch_probs = np.linspace(switch_goal_prob, 0, num=max_steps//2).tolist() + [0.0] * (max_steps-max_steps//2)
+    switch_probs = np.linspace(switch_goal_prob, 0.2, num=max_steps//2).tolist() + [0.2] * (max_steps-max_steps//2)
     
     if use_remerge:
         agent.memory.wire_memory()
