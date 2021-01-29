@@ -35,13 +35,13 @@ class AttractorNetwork:
         self.weights = {
             's2h':np.zeros((self.state_size, self.hidden_size)),
             'h2s':np.zeros((self.hidden_size, self.state_size)),
-            'ns2h':np.zeros((self.state_size, self.hidden_size)),
-            'h2ns':np.zeros((self.hidden_size, self.state_size)),
+            # 'ns2h':np.zeros((self.state_size, self.hidden_size)),
+            # 'h2ns':np.zeros((self.hidden_size, self.state_size)),
         }
         
         self.netin_buffer = {
             's':np.zeros((1, self.state_size)),
-            'ns':np.zeros((1, self.state_size)),
+            # 'ns':np.zeros((1, self.state_size)),
             'h':np.zeros((1, self.hidden_size))
         }
     
@@ -66,15 +66,15 @@ class AttractorNetwork:
 
     def i_activation(self, netin):
         # logistic
-        # return np.array([1/(1+np.exp(-x/self.i_tau)) for x in netin]) - 0.5 # i don't want zero memories to be activated
+        return np.array([1/(1+np.exp(-x/self.i_tau)) for x in netin]) - 0.5 # i don't want zero memories to be activated
         # softmax
         # NOTE: on non-zero values only, to ensure empty memory slots don't get chosen
-        non_zero_mask = netin!=0.0
-        masked_netin = netin[non_zero_mask]
-        denom = np.sum([np.exp(x/self.i_tau) for x in masked_netin])
-        activation = np.array([np.exp(x/self.i_tau)/denom for x in masked_netin])
-        netin[non_zero_mask] = activation
-        return netin
+#         non_zero_mask = netin!=0.0
+#         masked_netin = netin[non_zero_mask]
+#         denom = np.sum([np.exp(x/self.i_tau) for x in masked_netin])
+#         activation = np.array([np.exp(x/self.i_tau)/denom for x in masked_netin])
+#         netin[non_zero_mask] = activation
+#         return netin
 
     def h_activation(self, netin):
         # hedge softmax
@@ -85,26 +85,27 @@ class AttractorNetwork:
         netin[non_zero_mask] = activation
         return netin
 
-    def forward(self, s_in=None, ns_in=None, binarize=False):
+    # def forward(self, s_in=None, ns_in=None, binarize=False):
+    def forward(self, s_in):
         
-        s_in = s_in if s_in is not None else np.zeros((1,self.state_size))
-        ns_in = ns_in if ns_in is not None else np.zeros((1,self.state_size))
+        s_in = s_in # if s_in is not None else np.zeros((1,self.state_size))
+        # ns_in = ns_in if ns_in is not None else np.zeros((1,self.state_size))
 
         snetin = np.dot(self.h_activation(self.netin_buffer['h']),self.weights['h2s']) + self.ext*s_in
         snetin = self.lmda*(snetin) + (1-self.lmda)*self.netin_buffer['s']
-        nsnetin = np.dot(self.h_activation(self.netin_buffer['h']),self.weights['h2ns']) + self.ext*ns_in
-        nsnetin = self.lmda*(nsnetin) + (1-self.lmda)*self.netin_buffer['ns']
-        hnetin = np.dot(self.i_activation(snetin),self.weights['s2h']) + np.dot(self.i_activation(nsnetin),self.weights['ns2h'])
+#         nsnetin = np.dot(self.h_activation(self.netin_buffer['h']),self.weights['h2ns']) + self.ext*ns_in
+#         nsnetin = self.lmda*(nsnetin) + (1-self.lmda)*self.netin_buffer['ns']
+        hnetin = np.dot(self.i_activation(snetin),self.weights['s2h']) # + np.dot(self.i_activation(nsnetin),self.weights['ns2h'])
         hnetin = self.lmda*(hnetin) + (1-self.lmda)*self.netin_buffer['h']
         
-        if binarize:
-            snetin[snetin!=0.0] = 1.0
-            nsnetin[nsnetin!=0.0] = 1.0
-            hnetin[hnetin!=0.0] = 1.0
+#         if binarize:
+#             snetin[snetin!=0.0] = 1.0
+#             nsnetin[nsnetin!=0.0] = 1.0
+#             hnetin[hnetin!=0.0] = 1.0
 
         # update netin buffer
         self.netin_buffer['s'] = snetin
-        self.netin_buffer['ns'] = nsnetin
+#         self.netin_buffer['ns'] = nsnetin
         self.netin_buffer['h'] = hnetin
 
         # compute activation
@@ -114,7 +115,7 @@ class AttractorNetwork:
             hact = hnetin
         else:
             sact = self.i_activation(snetin)
-            nsact = self.i_activation(nsnetin)
+#             nsact = self.i_activation(nsnetin)
             hact = self.h_activation(hnetin)
 
         return sact, nsact, hact
@@ -122,7 +123,7 @@ class AttractorNetwork:
     def clean_buffer(self):
         self.netin_buffer = {
             's':np.zeros((1, self.state_size)),
-            'ns':np.zeros((1, self.state_size)),
+#             'ns':np.zeros((1, self.state_size)),
             'h':np.zeros((1, self.hidden_size))
         }
     
@@ -130,8 +131,8 @@ class AttractorNetwork:
         self.weights = {
             's2h':np.zeros((self.state_size, self.hidden_size)),
             'h2s':np.zeros((self.hidden_size, self.state_size)),
-            'ns2h':np.zeros((self.state_size, self.hidden_size)),
-            'h2ns':np.zeros((self.hidden_size, self.state_size)),
+#             'ns2h':np.zeros((self.state_size, self.hidden_size)),
+#             'h2ns':np.zeros((self.hidden_size, self.state_size)),
         }
     
     def clone(self):
